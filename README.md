@@ -30,15 +30,15 @@ This is the repository for the manuscript "Analysis of Eligibility Criterion Clu
 If you prefer not to use Docker or if you're working in an environment where Docker is not available, you can install the dependencies manually using Conda:
 
 1. Install [Miniconda](https://docs.conda.io/en/latest/miniconda.html) or Anaconda on your system if you haven't already.
-2. Create a new Conda environment using the `environment_droplet.yml` file provided in the `environment` directory:
+2. Create a new Conda environment using the `environment/setup_env.sh` script:
 
    ```
-   conda env create -f environment/environment_droplet.yml
+   ./environment/setup_env.sh
    ```
 3. Activate the new environment:
 
    ```
-   conda activate ctxai  # or the enviornment name you choose to edit in environment/environment_droplet.yml
+   conda activate ctxai
    ```
 
 ### Using the repository
