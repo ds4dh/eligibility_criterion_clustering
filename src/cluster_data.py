@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 import torch
 try:
     from cluster_utils import ClusterGeneration, ClusterOutput, get_dim_red_model, set_seeds
-    from src.parse_utils import get_embeddings
+    from parse_utils import get_embeddings
 except:
     from .cluster_utils import ClusterGeneration, ClusterOutput, get_dim_red_model, set_seeds
     from .parse_utils import get_embeddings

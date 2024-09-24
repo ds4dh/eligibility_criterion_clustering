@@ -2,57 +2,60 @@ import os
 import csv
 import json
 import time
-import random
 import argparse
 import config
 logger = config.CTxAILogger("INFO")
-import numpy as np
 import pandas as pd
 import torchdata.datapipes.iter as dpi
 import openai
 from openai import OpenAI
 from parse_data import CustomJsonParser
-from src.parse_utils import ClinicalTrialFilter
+from parse_utils import ClinicalTrialFilter
 from cluster_utils import ClusterOutput
 from cluster_data import cluster_data_fn
 from generate_utils import compute_scores
 from config import update_config
+from tqdm import tqdm
 
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Generate data for clinical trials.")
     parser.add_argument("--embed_model_id", type=str, default="pubmed-bert-sentence", help="EC embedding model ID")
+    parser.add_argument("--evaluation_cond_type_filter", type=str, default="C01", help="Main condition filter for evaluated CTs")
     parser.add_argument("--cond_filter_lvl", type=int, default=2, help="Condition filter level")
     parser.add_argument("--itrv_filter_lvl", type=int, default=1, help="Intervention filter level")
-    parser.add_argument("--result_dir", type=str, default="ec_generation_evaluation_results", help="Directory for the result csv file")
-    parser.add_argument("--num_samples", type=int, default=10, help="Number of EC samples evaluated")
+    parser.add_argument("--result_dir", type=str, default="./experiments/experiment_3_results", help="Directory for the result csv file")
+    parser.add_argument("--num_samples", type=int, default=100, help="Number of EC samples evaluated")
     return parser.parse_args()
 
 
 ARGS = parse_arguments()
 EMBED_MODEL_ID = ARGS.embed_model_id
+EVALUATION_COND_TYPE_FILTER = ARGS.evaluation_cond_type_filter
 COND_FILTER_LVL = ARGS.cond_filter_lvl
 ITRV_FILTER_LVL = ARGS.itrv_filter_lvl
 RESULT_DIR = ARGS.result_dir
 NUM_EVALUATED_SAMPLES = ARGS.num_samples
 RESULT_PATH = os.path.join(
     RESULT_DIR,
-    "model-%s_cond-%1i_itrv-%1i.csv" % (EMBED_MODEL_ID, COND_FILTER_LVL, ITRV_FILTER_LVL)
+    "model-%s_type%s_cond-%1i_itrv-%1i.csv" % (EMBED_MODEL_ID, EVALUATION_COND_TYPE_FILTER, COND_FILTER_LVL, ITRV_FILTER_LVL)
 )
-MAX_GENERATED_ECS = 15
+RANDOM_COND_TYPE_FILTERS = [
+    "C05", "C06", "C07", "C08", "C09", "C10",
+    "C11", "C12", "C15", "C16", "C17", "C18", "C19",
+]  # anything that is not in ["C01", "C04", "C14", "C20"] and that is below "C20"
+N_GENERATED_ECS = {"C01": 21, "C04": 30, "C14": 20, "C20": 24}.get(EVALUATION_COND_TYPE_FILTER, 21)  # average ECs per CT values (and default is overall average)
 LLM_SYSTEM_PROMPT = "You are an assistant helping to generate eligibility criteria sections for clinical trials."
 LLM_USER_PROMPT = """I have a clinical trial that includes the following information:
 [CT_DATA_TEXT]
 Based on the information above, generate the eligibility criteria section for this clinical trial.
-Make sure the generated section includes %s eligibility criteria and has the following format:
+Make sure the generated section includes %i eligibility criteria and has the following format:
 Inclusion criteria:
 <all inclusion criteria>
 Exclusion criteria:
 <all exclusion criteria>
-""" % MAX_GENERATED_ECS
-TOPIC_DATA_PROMPT = """For context, here are topics identified in clinical trials sharing similar phase(s), condition(s) and intervention(s):
-[TOPIC_DATA]
-"""
+""" % N_GENERATED_ECS
+FAILED_CLUSTERING_TEXT = "Clustering did not converge"
 
 
 def main():
@@ -61,10 +64,13 @@ def main():
     """
     # Load evaluation dataset
     cfg = config.get_config()
-    ct_data, ec_data = get_evaluated_ct_dataset(cfg["FULL_DATA_PATH"])
+    ct_data, ec_references = get_evaluated_ct_dataset(
+        data_path=cfg["FULL_DATA_PATH"],
+        cond_type_filters=[EVALUATION_COND_TYPE_FILTER],
+    )
     
     # Loop through evaluation dataset to score both methods
-    for ct_sample, ec_sample in zip(ct_data, ec_data):
+    for ct_sample, ec_reference in zip(ct_data, ec_references):
         
         # LLM method for ec-section generation
         ct_path = ct_sample["ct_path"]
@@ -78,20 +84,25 @@ def main():
             cluster_ec_section = generate_cluster_ec_section(cluster_output)
         except Exception as e:
             logger.info("Clustering method failed (%s)" % str(e))
-            cluster_ec_section = ""  # default cluster ec-section
+            cluster_ec_section = FAILED_CLUSTERING_TEXT  # default cluster ec-section
             cluster_quality = -1.0  # minimum value
         
         # Compute and add scores to a csv file
         add_row_to_csv_file(
             ct_path=ct_path,
-            reference=ec_sample,
+            reference=ec_reference,
             llm_prediction=llm_ec_section,
             cluster_prediction=cluster_ec_section,
             cluster_quality=cluster_quality,
         )
     
     # Add random performance columns after all result rows were written
-    add_random_performance(RESULT_PATH)
+    _, ec_references_random = get_evaluated_ct_dataset(
+        data_path=cfg["FULL_DATA_PATH"],
+        cond_type_filters=RANDOM_COND_TYPE_FILTERS,
+        random_mode=True,
+    )
+    add_random_performance(RESULT_PATH, ec_references_random)
 
 
 def add_row_to_csv_file(
@@ -129,7 +140,10 @@ def add_row_to_csv_file(
         writer.writerow(result_dict.values())
 
 
-def add_random_performance(path_to_csv_result_file: str) -> None:
+def add_random_performance(
+    path_to_csv_result_file: str,
+    random_references: list[str],
+) -> None:
     """ Add random scores (scores using suffled references) to result csv file
 
     Args:
@@ -137,26 +151,40 @@ def add_random_performance(path_to_csv_result_file: str) -> None:
     """
     # Read result file as a pandas dataframe and extracts shuffled references
     df = pd.read_csv(path_to_csv_result_file)
-    df["Cluster EC Section"] = df["Cluster EC Section"].fillna("")  # NaN values
-    references = df["Reference"].tolist()
-    shuffled_references = references[:]
-    random.shuffle(shuffled_references)
+    # df["Cluster EC Section"] = df["Cluster EC Section"].fillna(FAILED_CLUSTERING_TEXT)  # NaN values
+    # references = df["Reference"].tolist()
+    # random_references = references[:]
+    # random.shuffle(random_references)
     
     # Recompute scores with shuffled references
-    shuffled_results = []
-    for index, row in df.iterrows():
-        shuffled_reference = shuffled_references[index]
-        shuffled_result_dict = compute_scores(
-            reference=shuffled_reference,
-            cluster_prediction=row["Cluster EC Section"],
-            llm_prediction=row["LLM EC Section"],
-        )
-        shuffled_results.append(shuffled_result_dict)
+    random_results = []
+    for index, row in tqdm(df.iterrows(), total=len(df), desc="Computing random scores"):
+        reference = random_references[index]
+        annoying_bug = True
+        n_trials = 0
+        
+        # Annoying bug almost never happens but is due to a very cryptic error
+        # that only occurs with SciBERTScore, for one reference in a thousands,
+        # so when this happens, another random reference is simply taken
+        while annoying_bug:
+            try:
+                result_dict = compute_scores(
+                    reference=reference,
+                    cluster_prediction=row["Cluster EC Section"],
+                    llm_prediction=row["LLM EC Section"],
+                )
+                annoying_bug = False
+            except RuntimeError:
+                n_trials = n_trials + 1
+                new_index = (index - n_trials) % len(random_references)
+                reference = random_references[new_index]
+        
+        random_results.append(result_dict)
     
     # Write shuffled scores in new columns
-    for key in shuffled_results[0].keys():
+    for key in random_results[0].keys():
         if "Score" in key:
-            df[f"Shuffled {key}"] = [result[key] for result in shuffled_results]
+            df[f"Shuffled {key}"] = [result[key] for result in random_results]
     
     # Save the updated dataframe back to CSV
     df.to_csv(path_to_csv_result_file, index=False)
@@ -176,8 +204,8 @@ def generate_llm_ec_section(ct_path: str) -> str:
     with open(ct_path, "r", encoding="utf-8") as file:
         ct_raw_dict: dict[str, dict|bool] = json.load(file)
     ct_raw_dict["protocolSection"].pop("eligibilityModule")
-    ct_raw_dict.pop("resultsSection", None)
-    ct_raw_dict.pop("hasResults", None)
+    ct_raw_dict.pop("resultsSection", None)  # since it wouldn't make sense to
+    ct_raw_dict.pop("hasResults", None)      # have results prior to the study
     user_prompt = LLM_USER_PROMPT.replace("[CT_DATA_TEXT]", str(ct_raw_dict))
     
     # Prompt gpt-3.5-turbo
@@ -242,7 +270,7 @@ def generate_cluster_ec_section(cluster_output: ClusterOutput) -> str:
     clusters = [c for c in cluster_output.cluster_instances if c.cluster_id != -1]
     clusters.sort(key=lambda cluster: cluster.prevalence, reverse=True)
     selected_ec_texts = [c.ec_list[0].raw_text for c in clusters]
-    ec_section = format_ec_section(selected_ec_texts[:MAX_GENERATED_ECS])
+    ec_section = format_ec_section(selected_ec_texts[:N_GENERATED_ECS])
     return ec_section
 
 
@@ -295,7 +323,8 @@ def update_config_filters(ct_data: dict) -> None:
     to_update.update({
         "DO_EVALUATE_CLUSTERING": True,
         "ADDITIONAL_NEGATIVE_FILTER": {"ct path": ct_data["ct_path"]},
-        "MAX_ELIGIBILITY_CRITERIA_SAMPLES": 100_000,
+        "MAX_ELIGIBILITY_CRITERIA_SAMPLES": 50_000,
+        "N_OPTUNA_TRIALS": 25,  # not harmful in 99% of cases, and else too slow
     })
     
     # Update globally shared configuration with current information
@@ -317,7 +346,11 @@ def extract_ids_at_lvl(ids: str, lvl: int) -> list[str]:
     return list(set(extracted_ids))
 
 
-def get_evaluated_ct_dataset(data_path: str) -> list[list[dict], list[str]]:
+def get_evaluated_ct_dataset(
+    data_path: str,
+    cond_type_filters: list[str],
+    random_mode=False,
+) -> list[list[dict], list[str]]:
     """ Build a dataset of evaluated clinical trials from raw json files
     
     Args:
@@ -338,22 +371,38 @@ def get_evaluated_ct_dataset(data_path: str) -> list[list[dict], list[str]]:
     
     # Check for existing data from previous runs
     try:
-        results_from_last_run = pd.read_csv(RESULT_PATH)
-        cts_evaluated_last_runs = results_from_last_run["CT Path"].tolist()
+        if not random_mode:
+            results_from_last_run = pd.read_csv(RESULT_PATH)
+            cts_evaluated_last_runs = results_from_last_run["CT Path"].tolist()
+        else:
+            cts_evaluated_last_runs = []    
     except FileNotFoundError:
         cts_evaluated_last_runs = []
     
     # Load just enough CT data to complete the previous runs
     input_data, target_data = [], []
-    for ct in filtered_cts:
+    for ct_metadata, ct_ec_section in filtered_cts:
+        
+        # Filter for condition type (to stratify generation experiment)
+        ct_cond_ids = ct_metadata["condition_ids"]
+        ct_cond_ids = [c for cc in ct_cond_ids for c in cc]  # flatten
+        matching_condition_found = False
+        for cond_type_filter in cond_type_filters:
+            if any([c.startswith(cond_type_filter) for c in ct_cond_ids]):
+                matching_condition_found = True
+        if not matching_condition_found: continue
+                
+        # Check is run is finished or if ct has already been run previously
         if len(input_data) >= NUM_EVALUATED_SAMPLES:
             break
         if len(cts_evaluated_last_runs) + len(input_data) >= NUM_EVALUATED_SAMPLES:
             break
-        if ct[0]["ct_path"] in cts_evaluated_last_runs:
+        if ct_metadata["ct_path"] in cts_evaluated_last_runs:
             continue
-        input_data.append(ct[0])  # clinical trial metadata
-        target_data.append(ct[1])  # eligibility criteria section
+        
+        # Include this ct in the dataset
+        input_data.append(ct_metadata)
+        target_data.append(ct_ec_section)
     
     return input_data, target_data
 

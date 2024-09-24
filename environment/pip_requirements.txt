@@ -7,6 +7,7 @@ optuna==3.5.0  # not in nvcr.io/nvidia/pytorch:23.12-py3
 transformers==4.37.0  # not in nvcr.io/nvidia/pytorch:23.12-py3
 nltk==3.8.1  # not in nvcr.io/nvidia/pytorch:23.12-py3
 rouge_score==0.1.2  # not in nvcr.io/nvidia/pytorch:23.12-py3
+bert-score==0.3.13  # not in nvcr.io/nvidia/pytorch:23.12-py3
 tqdm==4.66.1
 numpy==1.24.4
 bertopic==0.16.0  # not in nvcr.io/nvidia/pytorch:23.12-py3

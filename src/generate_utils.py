@@ -82,7 +82,7 @@ def calculate_bertscore_with_sliding_window(
         else:
             if verbose: print("Extra chunks in generated text will be cut")
             predicted_chunks = predicted_chunks[:len(target_chunks)]
-                
+            
     # Decode chunks back to text
     target_chunks = [tokenizer.decode(chunk, skip_special_tokens=True) for chunk in target_chunks]
     predicted_chunks = [tokenizer.decode(chunk, skip_special_tokens=True) for chunk in predicted_chunks]
@@ -153,11 +153,7 @@ def compute_scores(
     """
     # Compute scores and average scores
     scorer = rouge_scorer.RougeScorer(["rouge1", "rouge2", "rougeL"], use_stemmer=True)
-    
-    try:
-        cluster_scores = scorer.score(target=reference, prediction=cluster_prediction)
-    except:
-        import ipdb; ipdb.set_trace()
+    cluster_scores = scorer.score(target=reference, prediction=cluster_prediction)
     llm_scores = scorer.score(target=reference, prediction=llm_prediction)
     cluster_avg_r = (cluster_scores["rouge1"].recall + cluster_scores["rouge2"].recall + cluster_scores["rougeL"].recall) / 3
     cluster_avg_p = (cluster_scores["rouge1"].precision + cluster_scores["rouge2"].precision + cluster_scores["rougeL"].precision) / 3
@@ -173,7 +169,7 @@ def compute_scores(
     llm_scores.update({"BERT": calculate_bertscore_with_sliding_window(target=reference, prediction=llm_prediction, scoring_model_id="bert-base-uncased")})
     llm_scores.update({"SciBERT": calculate_bertscore_with_sliding_window(target=reference, prediction=llm_prediction, scoring_model_id="allenai/scibert_scivocab_uncased")})
     llm_scores.update({"Longformer": calculate_bertscore_with_sliding_window(target=reference, prediction=llm_prediction, scoring_model_id="allenai/longformer-large-4096")})
-    
+        
     # Prepare the result row for this clinical trial
     method_perfs_avg = {"Cluster": cluster_avg_f, "LLM": llm_avg_f}
     best_method_avg = max(method_perfs_avg, key=lambda k: method_perfs_avg[k])

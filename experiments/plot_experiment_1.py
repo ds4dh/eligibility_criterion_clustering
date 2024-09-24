@@ -37,7 +37,7 @@ def main():
     _, axs = plt.subplots(
         nrows=1,
         ncols=2,
-        width_ratios=(2, 1),
+        width_ratios=(3, 1),
         figsize=(0.5 * len(MODEL_ORDER) * len(COND_IDS) + 6, 4.5),
     )
     
@@ -46,7 +46,7 @@ def main():
     plot_experiment_1B(axs[1])
     
     # Save polished figure
-    plt.subplots_adjust(wspace=0.5)
+    plt.subplots_adjust(wspace=1.0)
     plt.tight_layout()
     plt.savefig(OUTPUT_PATH, dpi=300)
     
@@ -102,22 +102,17 @@ def plot_experiment_1B(ax):
     
     # Extract columns and rows of interest
     case3_index = df.index[df["case 1, sort"] == "case 3, sort"][0]
-    case4_index = df.index[df["case 1, sort"] == "case 4, sort"][0]
     case3_data = df.loc[case3_index + 1:case3_index + 3, ["Unnamed: 0", "case 1, sort"]].set_index("Unnamed: 0")
-    case4_data = df.loc[case4_index + 1:case4_index + 3, ["Unnamed: 0", "case 1, sort"]].set_index("Unnamed: 0")
     case3_data.columns = ["PubMed-BERT-Sentence"]
-    case4_data.columns = ["PubMed-BERT"]
     case3_data = case3_data / case3_data.sum() * 100
-    case4_data = case4_data / case4_data.sum() * 100
     
     # Plot results
-    df_plot = pd.merge(case3_data, case4_data, left_index=True, right_index=True)
-    df_plot = df_plot.T
+    df_plot = case3_data.T
     df_plot.plot(kind="bar", alpha=0.75, ax=ax)
     
     # Polish plot
     ax.set_ylim([0, 100])
-    ax.set_ylabel("Accuracy (%)", fontsize=16, labelpad=0) 
+    ax.set_ylabel("Accuracy (%)", fontsize=16, labelpad=0)
     ax.set_xticks(range(len(df_plot.index)))
     ax.set_xticklabels(df_plot.index, rotation=0, fontsize=16)
     ax.legend(["Correct", "Incorrect", "Unclear"], fontsize=14)

@@ -19,7 +19,7 @@ from torchdata.dataloader2 import (
 )
 try:
     from cluster_utils import set_seeds
-    from src.parse_utils import (
+    from parse_utils import (
         ClinicalTrialFilter,
         CriteriaParser,
         CriteriaCSVWriter,

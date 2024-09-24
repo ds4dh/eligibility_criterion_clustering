@@ -8,7 +8,8 @@ PYTHON_VERSION="3.10"
 conda create --solver=libmamba -n $ENV_NAME \
       -c rapidsai -c conda-forge -c nvidia \
       cuml=23.12 python=$PYTHON_VERSION cuda-version=11.8 -y
-source activate $ENV_NAME
+eval "$(conda shell.bash hook)"
+conda activate $ENV_NAME
 
 # Check if the activation was successful
 if [ "$CONDA_DEFAULT_ENV" = "$ENV_NAME" ]; then

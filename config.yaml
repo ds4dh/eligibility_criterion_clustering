@@ -40,7 +40,7 @@ MESH_CROSSWALK_INVERTED_PATH: utils/mesh_crosswalk_inverted.json
 CHOSEN_STATUSES: []  # [completed, suspended, withdrawn, terminated, unknown status] -> /!\ I ended up selecting only completed + terminated CTs
 CHOSEN_CRITERIA: []  # [in]
 CHOSEN_PHASES: []  # [phase2]
-CHOSEN_COND_IDS: ["C01"]  # Infections [C01] // Neoplasms [C04] // Cardiovascular Diseases [C14] // Immune System Diseases [C20]
+CHOSEN_COND_IDS: []  # Infections [C01] // Neoplasms [C04] // Cardiovascular Diseases [C14] // Immune System Diseases [C20]
 CHOSEN_ITRV_IDS: []  # [D02]
 CHOSEN_COND_LVL: 2  # null to ignore
 CHOSEN_ITRV_LVL: 1  # null to ignore
@@ -61,7 +61,7 @@ EMBEDDING_MODEL_ID_MAP:
 
 # Clustering hyper-optimization parameters
 N_OPTUNA_TRIALS: 100
-N_CLUSTER_MAX: 1000  # used to avoid extreme hyper-parameter combinations
+N_CLUSTER_MAX: 500  # used to avoid extreme hyper-parameter combinations
 OPTUNA_PARAM_RANGES:
   max_cluster_size_primary: [0.01, 0.050]
   min_cluster_size_primary: [0.0001, 0.001]

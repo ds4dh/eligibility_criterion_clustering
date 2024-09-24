@@ -6,8 +6,13 @@ from scipy.stats import ttest_rel
 
 
 DATA_DIR = "experiments/experiment_3_results"
-FILTER_LEVEL = {"cond": 3, "itrv": 2}
-DATA_FILE_NAME = lambda c, i: "model-pubmed-bert-sentence_cond-%1i_itrv-%1i.csv" % (c, i)
+FILTER_LEVELS = [
+    {"cond": 2, "itrv": 1},
+    {"cond": 3, "itrv": 2},
+    {"cond": 4, "itrv": 3},
+]
+EVALUATED_CT_COND_TYPE_FILTERS = ["C01", "C04", "C14", "C20"]
+DATA_FILE_NAME = lambda t, c, i: "model-pubmed-bert-sentence_type%s_cond-%1i_itrv-%1i.csv" % (t, c, i)
 METRICS = ["ROUGE-Average-F Score", "SciBERT-F Score"]
 SUPPL_METRICS = [
     "ROUGE-1-F Score", "ROUGE-2-F Score", "ROUGE-L-F Score",
@@ -15,40 +20,52 @@ SUPPL_METRICS = [
 ]
 METHOD_COLORS = ["tab:blue", "tab:cyan", "tab:red", "tab:orange"]
 METHODS = ["Cluster", "Shuffled Cluster", "LLM", "Shuffled LLM"]
+def label_map_fn(s):
+    if "BERT" in s or "Longformer" in s:
+        label = "BERT Score (%s)" % s.split("-")[0].split(" ")[-1]
+    else:
+        label = s
+    return label.replace("-F ", " F1-")
 
 
 def main():
-    plot_one_metric_set(
-        metric_set=METRICS,
-        output_path="experiments/figure_experiment_3.png",
-    )
-    plot_one_metric_set(
-        metric_set=SUPPL_METRICS,
-        output_path="experiments/figure_experiment_3_suppl.png",
-    )
+    for filter_level in FILTER_LEVELS:
+        filter_str = "C-%1i-I-%1i" % (filter_level["cond"], filter_level["itrv"])
+        plot_one_metric_set(
+            metric_set=METRICS,
+            cond_types=EVALUATED_CT_COND_TYPE_FILTERS,
+            filter_level=filter_level,
+            output_path="experiments/figure_experiment_3_%s.png" % filter_str,
+        )
+        plot_one_metric_set(
+            metric_set=SUPPL_METRICS,
+            cond_types=EVALUATED_CT_COND_TYPE_FILTERS,
+            filter_level=filter_level,
+            output_path="experiments/figure_experiment_3_%s_suppl.png" % filter_str,
+        )
 
 
-def plot_one_metric_set(metric_set, output_path):
+def plot_one_metric_set(
+    metric_set: list[str],
+    cond_types: list[str],
+    filter_level: dict[str, int],
+    output_path: str,
+):
     """ Generate a comparison plot between cluster and LLM EC generation methods,
         for a given set of metrics
     """
     # Plot each condition's results
-    assert len(metric_set) <= 6, "No more than 6 metrics plotted in one figure"
-    n_plot_cols = 3 if len(metric_set) == 6 else len(metric_set)
-    n_plot_rows = 2 if len(metric_set) == 6 else 1
     _, axs = plt.subplots(
-        n_plot_rows, n_plot_cols,
-        figsize=(6 * n_plot_cols, 6 * n_plot_rows)
+        nrows=len(metric_set), ncols=len(cond_types),
+        figsize=(6 * len(cond_types), 6 * len(metric_set))
     )
-    if len(metric_set) == 1:
-        axs = [axs]
-    else:
-        axs = axs.flatten()
+    if len(metric_set) == 1: axs = [axs]
     for i, metric in enumerate(metric_set):
-        plot_legend = (i // n_plot_cols == n_plot_rows - 1 and i % n_plot_cols == n_plot_cols // 2)
-        plotted_keys = ["%s %s" % (method, metric) for method in METHODS]
-        plot_one_metric(plotted_keys, plot_legend, axs[i], len(axs))
-        
+        for j, cond_type in enumerate(cond_types):
+            # plot_legend = (i // n_plot_cols == n_plot_rows - 1 and i % n_plot_cols == n_plot_cols // 2)
+            plotted_keys = ["%s %s" % (method, metric) for method in METHODS]
+            plot_one_metric(plotted_keys, axs[i][j], cond_type, filter_level)
+            
     # Save adjusted plot
     plt.tight_layout()
     plt.subplots_adjust(wspace=0.2)
@@ -57,9 +74,11 @@ def plot_one_metric_set(metric_set, output_path):
     
 def plot_one_metric(
     plotted_keys: list[str],
-    plot_legend: bool,
+    # plot_legend: bool,
     ax: "plt.Axis",
-    num_axes: int,
+    cond_type: str,
+    filter_level: dict[str, int],
+    num_comparisons: int=1,  # TODO: TO UPDATE
 ) -> float:
     """ Plot results of experiment 3 for one set of condition and intervention levels
     
@@ -67,7 +86,7 @@ def plot_one_metric(
         level_set (dict[str, int]): condition and intervention filter levels
     """
     # Load the data
-    csv_file_path = DATA_FILE_NAME(FILTER_LEVEL["cond"], FILTER_LEVEL["itrv"])
+    csv_file_path = DATA_FILE_NAME(cond_type, filter_level["cond"], filter_level["itrv"])
     df_raw = pd.read_csv(os.path.join(DATA_DIR, csv_file_path))
     
     # Filter samples where the clustering algorithm converged
@@ -101,7 +120,6 @@ def plot_one_metric(
         return 0.5 + group_shift + bar_shift
     
     # Statistical tests utilities
-    num_comparisons = (num_axes * 3)  # For each metric: Cluster vs. LLM, Cluster vs. Random, LLM vs. Random
     significant = lambda p: "*" if p < 0.05 else "n.s."
     significant_bf = lambda p: "*" if p < 0.05 / num_comparisons else "n.s."
     
@@ -157,28 +175,21 @@ def plot_one_metric(
     print("\n", end="")
     ax.set_xlim([0, 1])
     ax.set_xticks([], [])
-    y_label = plotted_keys[0]\
-        .split("Cluster ")[1]\
-        .replace("-", " ")\
-        .replace(" F ", " F1-")
-    if num_axes == 1:
-        ax.set_ylabel(y_label, fontsize=16)
-    else:
-        ax.set_title(y_label, fontsize=16)
-    if plot_legend:
-        if num_axes == 1:
-            ax.set_ylim([0.0, max_value * 1.2])
-        else:
-            bbox_x = 0.5 if num_axes % 2 == 1 or num_axes == 6 else -0.1
-            bbox_y = -max_value / 50
-        ax.legend(
-            ax_handles,
-            ax_labels,
-            fontsize=16 if num_axes > 1 else 14,
-            loc="upper center",
-            bbox_to_anchor=(bbox_x, bbox_y) if num_axes > 1 else None,
-            ncol=len(ax_handles) if num_axes > 1 else len(ax_handles) // 2,
-        )
+    ax.set_ylabel(label_map_fn(plotted_keys[0]), fontsize=16)
+    # if plot_legend:
+    #     if num_axes == 1:
+    #         ax.set_ylim([0.0, max_value * 1.2])
+    #     else:
+    #         bbox_x = 0.5 if num_axes % 2 == 1 or num_axes == 6 else -0.1
+    #         bbox_y = -max_value / 50
+    #     ax.legend(
+    #         ax_handles,
+    #         ax_labels,
+    #         fontsize=16 if num_axes > 1 else 14,
+    #         loc="upper center",
+    #         bbox_to_anchor=(bbox_x, bbox_y) if num_axes > 1 else None,
+    #         ncol=len(ax_handles) if num_axes > 1 else len(ax_handles) // 2,
+    #     )
 
 
 if __name__ == "__main__":
