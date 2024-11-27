@@ -52,6 +52,7 @@ def run_experiment_1():
 def cluster_data_fn(
     embed_model_id: str,
     write_results: bool=True,
+    hierarchical_ec_scraping: bool=False,
 ) -> ClusterOutput:
     """ Cluster eligibility criteria using embeddings from one language model
     """
@@ -72,9 +73,9 @@ def cluster_data_fn(
         embed_model_id=embed_model_id,
         preprocessed_dir=cfg["PREPROCESSED_DIR"],
         processed_dir=cfg["PROCESSED_DIR"],
-        write_results=write_results,
+        hierarchical_ec_scraping=hierarchical_ec_scraping,
     )
-    
+        
     # Generate cluster representation with BERTopic
     if not cfg["LOAD_BERTOPIC_RESULTS"]:
         topic_model = train_bertopic_model(raw_txts, embeddings)
@@ -87,6 +88,11 @@ def cluster_data_fn(
     else:
         logger.info("Loading BERTopic model trained on eligibility criteria embeddings")
         topic_model = BERTopic.load(bertopic_ckpt_path)
+        if cfg["REGENERATE_REPRESENTATIONS_AFTER_LOADING_BERTOPIC_RESULTS"]:
+            topic_model.update_topics(
+                docs=raw_txts,
+                representation_model=get_representation_model(),
+            )
     
     # Generate results from the trained model and predictions
     logger.info("Writing clustering results with bertopic titles")
@@ -178,7 +184,6 @@ def plot_model_comparison(metrics: dict, output_path: str, fig_title: str):
         d_free, d_dept = d["label_free"], d["label_%s" % dept_key]
         d_free = {k: v for k, v in d_free.items() if k in to_plot}
         d_dept = {k: d_dept[k] for k in d_dept.keys() if k in to_plot}
-        # d_dept.update(d_free)  # only d_dept for now
         return d_dept
     
     # Select data to plot
@@ -186,7 +191,7 @@ def plot_model_comparison(metrics: dict, output_path: str, fig_title: str):
     for (model_name, metric) in metrics.items():
         to_plot[model_name] = norm_fn(metric, "dept")
     to_plot["rand"] = norm_fn(list(metrics.values())[0], "rand")
-    # to_plot["ceil"] = norm_fn(list(metrics.values())[0], "ceil")
+    to_plot["ceil"] = norm_fn(list(metrics.values())[0], "ceil")
     
     # Retrieve metric labels and model names
     labels = list(next(iter(to_plot.values())).keys())
@@ -216,7 +221,7 @@ def plot_model_comparison(metrics: dict, output_path: str, fig_title: str):
             
     # Adjustments to the plot
     ax.set_title(fig_title, fontsize="x-large")
-    ax.set_ylim(0.0, 1.0 if "ceil" in to_plot.keys() else 0.2)
+    ax.set_ylim(0.0, 1.25 * max(to_plot["ceil"].values()) if "ceil" in to_plot.keys() else 0.2)
     ax.set_xticks([i + width * (num_models - 1) / 2 for i in range(len(labels))])
     ax.set_xticklabels(labels, fontsize="large", rotation=22.5)
     ax.set_ylabel("Scores", fontsize="x-large")

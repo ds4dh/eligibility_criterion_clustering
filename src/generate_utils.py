@@ -1,10 +1,19 @@
+import os
+import time
+try:
+    import config
+except:
+    from . import config
+logger = config.CTxAILogger("INFO")
 import logging
+logging.getLogger("transformers").setLevel(logging.ERROR)
 import torch
+import openai
+from openai import OpenAI
 from transformers import AutoTokenizer
 from rouge_score import rouge_scorer
 from bert_score import score
 from dataclasses import dataclass
-logging.getLogger("transformers").setLevel(logging.ERROR)
 
 
 @dataclass
@@ -239,3 +248,68 @@ def compute_scores(
     }
     
     return result_dict
+
+
+def get_openai_api_key():
+    """ Retrieve the OpenAI API key from the configuration file
+    
+    Returns:
+        str: the OpenAI API key
+    """
+    cfg = config.get_config()
+    api_path = os.path.join(cfg["CLUSTER_REPRESENTATION_PATH_TO_OPENAI_API_KEY"])
+    try:
+        with open(api_path, "r", encoding="utf-8") as f: return f.read()
+    except:
+        raise FileNotFoundError(" ".join([
+            "To use CLUSTER_REPRESENTATION_MODEL = gpt,",
+            "you must have an api-key file at the path defined in the",
+            "config under CLUSTER_REPRESENTATION_PATH_TO_OPENAI_API_KEY",
+        ]))
+        
+
+def generate_llm_response(
+    user_prompt: str,
+    system_prompt: str|None=None,
+) -> str:
+    """ Prompt an LLM (ChatGPT-3.5-Turbo) and collect response text
+
+    Args:
+        prompt (str): prompt sent to the LLM
+
+    Returns:
+        str: text-formatted response of the LLM to the prompt
+    """
+    # Build prompt messages for the LLM
+    if system_prompt is not None:
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+    else:
+        messages = [{"role": "user", "content": user_prompt}]
+    
+    # Send the formatted messages to the LLM and collect responose
+    max_attempts = 5
+    for attempt in range(max_attempts):
+        try:
+            client = OpenAI(api_key=get_openai_api_key())
+            response = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=messages,
+            )
+            
+            # Extract the generated EC section from the API response
+            response_text: str = response.choices[0].message.content
+            
+            return response_text.strip()
+        
+        # Expected error handling
+        except openai.OpenAIError as e:
+            logger.error("Openai error occured (%s), retrying" % str(e))
+            user_prompt = user_prompt[int(len(user_prompt) * 0.9)]
+        
+        # Exponential back-off
+        time.sleep(2 ** attempt)
+        
+    return "Failed to generate EC section after multiple attempts."

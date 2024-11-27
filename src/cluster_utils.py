@@ -29,7 +29,6 @@ from cuml import HDBSCAN
 from cuml.metrics.cluster import silhouette_score
 
 # Error handling for GPU
-import concurrent.futures
 import pynvml
 import rmm
 import logging
@@ -46,7 +45,7 @@ from sklearn.metrics import (
     mutual_info_score,
     adjusted_mutual_info_score,
     adjusted_rand_score,
-    homogeneity_completeness_v_measure,
+    homogeneity_completeness_v_measure as hcv_measure,
 )
 
 # Dimensionality reduction
@@ -76,7 +75,7 @@ class ClusterGeneration:
         else:
             self.sampler = RandomSampler(seed=self.random_state)
     
-    def fit(self, X: np.ndarray) -> dict:
+    def fit_old(self, X: np.ndarray) -> dict:
         """ Use optuna to determine best set of cluster parameters
         """
         with LocalCUDACluster(
@@ -110,6 +109,29 @@ class ClusterGeneration:
         self.best_hyper_params = study.best_params
         self.labels_ = self.predict(X)
         return self
+    
+    def fit(self, X: np.ndarray) -> dict:
+        """ Use optuna to determine best set of cluster parameters
+        """
+        # Initialize optuna study
+        study = optuna.create_study(
+            sampler=self.sampler,
+            direction="maximize",
+        )
+        
+        # Find best set of hyper-parameters
+        objective = lambda trial: self.objective_fn(trial, X)
+        study.optimize(
+            func=objective,
+            n_trials=self.n_optuna_trials,
+            show_progress_bar=True,
+            gc_after_trial=True,
+            n_jobs=1,
+        )
+        
+        self.best_hyper_params = study.best_params
+        self.labels_ = self.predict(X)
+        return self
         
     def predict(self, X: np.ndarray) -> list[int]:
         """ Cluster samples and return cluster labels for each sample
@@ -126,7 +148,9 @@ class ClusterGeneration:
         params = self.suggest_parameters(trial)
         try:
             cluster_info = self.clusterize(data=data, params=params)
-        except Exception:
+        except Exception as e:
+            print(str(e))
+            exit()
             return float("-inf")
         
         # Return metric from the clustering results
@@ -568,40 +592,55 @@ class ClusterOutput:
             "Dunn index": self.dunn_index(cluster_data, cluster_lbls),
         }
         
-        # Create a new sample for each [phase, cond, itrv] label combination
+        # Fill-in true and cluster ("dept") labels, duplicating samples
+        # when the corresponding clinical trial has multiple combinations
+        # of phase/condition/intervention
         cluster_lbls = cluster_lbls.tolist()
-        dupl_lbls = {"dept": [], "true": [], "ceil": []}
-        for cluster_lbl, phases, conds, itrvs in\
-            zip(cluster_lbls, self.phases, self.conds, self.itrvs):
-            
-            # Only evaluates clustered eligibility criteria
+        dupl_lbls = defaultdict(list)
+        for cluster_lbl, phases, conds, itrvs, ct_path in\
+            zip(cluster_lbls, self.phases, self.conds, self.itrvs, self.ct_paths):
             if cluster_lbl != -1:
                 
                 # One label = one combination of phase/condition/intervention
                 true_lbl_combinations = list(product(phases, conds, itrvs))
-                ceil_lbl_combination = true_lbl_combinations[0]
-                for true_lbl_combination in true_lbl_combinations:
+                for i, true_lbl_combination in enumerate(true_lbl_combinations):
+                    true_lbl = "- ".join(true_lbl_combination)
+                    dupl_lbls["true"].append(true_lbl)
                     dupl_lbls["dept"].append(cluster_lbl)
-                    dupl_lbls["true"].append("- ".join(true_lbl_combination))
-                    dupl_lbls["ceil"].append("- ".join(ceil_lbl_combination))
+                    
+        #########################################################################
+        # ADDED FOR REVISION 1
+        
+        # Build random and optimal inferred labels to compute floor and ceiling
+        # performance by assigning a sample to the true label but assuming other
+        # samples from the same clinical trial are in different clusters
+        all_true_labels = list(set(dupl_lbls["true"]))
+        used_ids = set()
+        for cluster_lbl, phases, conds, itrvs, ct_path in\
+            zip(cluster_lbls, self.phases, self.conds, self.itrvs, self.ct_paths):
+            if cluster_lbl != -1:
                 
-        # Create a set of int labels for label-dependent metrics
+                # One label = one combination of phase/condition/intervention
+                true_lbl_combinations = list(product(phases, conds, itrvs))
+                for i, true_lbl_combination in enumerate(true_lbl_combinations):
+                    used_id = f"{ct_path}_{i}"  # accounting for duplicated samples
+                    optim_lbl = true_lbl if used_id not in used_ids else "other"
+                    used_ids.add(used_id)
+                    dupl_lbls["ceil"].append(f"{optim_lbl}_{i}")
+                    dupl_lbls["rand"].append(random.choice(all_true_labels))
+                    
+        # ADDED FOR REVISION 1
+        #########################################################################
+        
+        # Evaluate clustering quality based on true labels
         true_encoder = LabelEncoder()
         true_lbls = true_encoder.fit_transform(dupl_lbls["true"]).astype(np.int32)
-        
-        # Evaluate clustering quality (label-dependent)
-        for pred_type in ["dept", "ceil", "rand"]:
+        for pred_type in ["dept", "rand", "ceil"]:
             
-            # Load prediction labels of the correct type
-            if pred_type == "rand":
-                pred_lbls = np.random.randint(0, max(true_lbls + 1), size=len(true_lbls))
-            else:
-                encoder = LabelEncoder()
-                pred_lbls = encoder.fit_transform(dupl_lbls[pred_type]).astype(np.int32)
-            
-            # Compute metrics with these labels
-            homogeneity, completeness, v_measure =\
-                homogeneity_completeness_v_measure(true_lbls, pred_lbls)
+            # Compute label-dependent metrics, comparing inferred labels to true labels
+            pred_encoder = LabelEncoder()
+            pred_lbls = pred_encoder.fit_transform(dupl_lbls[pred_type]).astype(np.int32)
+            homogeneity, completeness, v_measure = hcv_measure(true_lbls, pred_lbls)
             cluster_metrics["label_%s" % pred_type] = {
                 "Homogeneity": homogeneity,
                 "Completeness": completeness,

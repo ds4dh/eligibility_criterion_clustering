@@ -52,8 +52,9 @@ def main():
     wsgi_process = run_wsgi_server()
     
     # Give the server some time to start
+    logger.info(f"Experiment 1 will start in a few seconds")
     time.sleep(20)
-
+    
     try:
         # Define your sequence of environments and data paths
         tasks = [
@@ -72,8 +73,16 @@ def main():
         ]
         
         for i, task in enumerate(tasks):
-            # task.update({"LOAD_PARSED_DATA": i != 0})
-            task.update({"LOAD_PARSED_DATA": True, "LOAD_EMBEDDINGS": True, "LOAD_BERTOPIC_RESULTS": True})
+            task.update({"LOAD_PARSED_DATA": i != 0})
+            # Use the line below after completing experiment 1 with the line above
+            # if you want to generate cluster representations with GPT-3.5-Turbo 
+            # task.update({
+            #     "LOAD_PARSED_DATA": True,
+            #     "LOAD_EMBEDDINGS": True,
+            #     "LOAD_BERTOPIC_RESULTS": True,
+            #     "CLUSTER_REPRESENTATION_MODEL": "gpt",
+            #     "REGENERATE_REPRESENTATIONS_AFTER_LOADING_BERTOPIC_RESULTS": True,
+            # })
             logger.info(f"Sending curl request with {task}")
             result = run_curl_command(task)
             if result.returncode == 0:

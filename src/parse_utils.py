@@ -765,7 +765,7 @@ def get_embeddings(
     embed_model_id: str,
     preprocessed_dir: str,
     processed_dir: str,
-    write_results: bool=True,
+    hierarchical_ec_scraping: bool=False,
 ) -> tuple[np.ndarray, list[str], dict]:
     """ Generate and save embeddings or load them from a previous run
     """
@@ -778,11 +778,11 @@ def get_embeddings(
             embed_model_id=embed_model_id,
         )
     else:
-        embeddings, raw_txts, metadatas = generate_embeddings(
-            input_dir=preprocessed_dir,
-            embed_model_id=embed_model_id,
-        )
-        if write_results:
+        if not hierarchical_ec_scraping:
+            embeddings, raw_txts, metadatas = generate_embeddings(
+                input_dir=preprocessed_dir,
+                embed_model_id=embed_model_id,
+            )
             save_embeddings(
                 output_dir=processed_dir,
                 embed_model_id=embed_model_id,
@@ -790,8 +790,79 @@ def get_embeddings(
                 raw_txts=raw_txts,
                 metadatas=metadatas,
             )
+        else:
+            embeddings, raw_txts, metadatas = generate_embeddings_hierarchically(
+                input_dir=preprocessed_dir,
+                embed_model_id=embed_model_id,
+            )
             
     return embeddings.numpy(), raw_txts, metadatas
+
+
+def generate_embeddings_hierarchically(
+    input_dir: str,
+    embed_model_id: str,
+) -> tuple[torch.Tensor, list[str], list[dict]]:
+    """ Try to select enough ECs when using clustering for EC section generation.
+        If not enough ECs are found with given condition and intervention levels,
+        both levels are decreased by one, e.g., (6, 5) -> (5, 4), ..., (2, 1).
+        If not enough ECs are found even after condiiton and intervention levels
+        are set to the minimum values (i.e., 2 and 1), found ECs are returned.
+    """
+    # Initialization
+    cfg = config.get_config()
+    base_chosen_cond_lvl = cfg["CHOSEN_COND_LVL"]
+    base_chosen_itrv_lvl = cfg["CHOSEN_ITRV_LVL"]
+    
+    # Try to get enough EC emeddings, raw texts, and metadatas
+    embeddings, raw_txts, metadatas = generate_embeddings(
+        input_dir=input_dir,
+        embed_model_id=embed_model_id,
+    )
+    
+    # If not enough, incrementally reduce chosen condition and intervention level
+    while len(embeddings) < cfg["MIN_EC_SAMPLES"]:
+        new_chosen_cond_lvl = cfg["CHOSEN_COND_LVL"] - 1
+        new_chosen_itrv_lvl = cfg["CHOSEN_ITRV_LVL"] - 1
+        if new_chosen_itrv_lvl == 0:  # itrv = lower one (see docstring)
+            raise RuntimeError("Not enough ECs identified!")  # break
+        
+        # Compute a more leniently matched set of ECs
+        logger.info("Decreasing check level to find more ECs (cond: %i, itrv: %i)" %\
+            (new_chosen_cond_lvl, new_chosen_itrv_lvl))
+        to_update = {
+            "CHOSEN_COND_LVL": new_chosen_cond_lvl,
+            "CHOSEN_ITRV_LVL": new_chosen_itrv_lvl,
+        }
+        config.update_config(to_update)
+        added_embeddings, added_raw_txts, added_metadatas = generate_embeddings(
+            input_dir=input_dir,
+            embed_model_id=embed_model_id,
+        )
+        
+        # Add new (and not already present) embeddings, raw texts, and metadatas
+        ids_to_add = [i for i, text in enumerate(added_raw_txts) if text not in raw_txts]
+        if len(ids_to_add) > 0:
+            embeddings = torch.cat([
+                embeddings,
+                torch.stack([added_embeddings[i] for i in ids_to_add])
+            ], dim=0)
+            raw_txts = raw_txts + [added_raw_txts[i] for i in ids_to_add]
+            metadatas = metadatas + [added_metadatas[i] for i in ids_to_add]
+    
+    # Put back base condition and intervention levels for next EC generation run
+    to_update = {
+        "CHOSEN_COND_LVL": base_chosen_cond_lvl,
+        "CHOSEN_ITRV_LVL": base_chosen_itrv_lvl,
+    }
+    config.update_config(to_update)
+    
+    # Make sure not too many ECs are returned
+    embeddings = embeddings[:cfg["MAX_EC_SAMPLES"]]
+    raw_txts = raw_txts[:cfg["MAX_EC_SAMPLES"]]
+    metadatas = metadatas[:cfg["MAX_EC_SAMPLES"]]
+    
+    return embeddings, raw_txts, metadatas
 
 
 def generate_embeddings(
@@ -838,7 +909,7 @@ def generate_embeddings(
         embeddings = torch.cat((embeddings, ec_embeddings.cpu()), dim=0)
         raw_txts.extend(raw_txt)
         metadatas.extend(metadata)
-        if len(raw_txts) > cfg["MAX_ELIGIBILITY_CRITERIA_SAMPLES"]: break
+        if len(raw_txts) > cfg["MAX_EC_SAMPLES"]: break
     
     # Make sure gpu memory is made free for report_cluster
     torch.cuda.empty_cache()

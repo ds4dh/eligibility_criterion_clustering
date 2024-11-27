@@ -1,6 +1,7 @@
 #!/bin/bash
 
 # Bash script variables
+export CUDA_VISIBLE_DEVICES=0
 export PYTHONPATH=$(pwd)
 PYTHON_SCRIPT_PATH="./src/generate_data.py"
 RESULT_DIR="./experiments/experiment_3_results"
@@ -10,8 +11,6 @@ MAX_TIME_PER_TRIAL=$((30 * 60))  # 30 minutes
 # List of filter level combinations ("COND_FILTER_LVL ITRV_FILTER_LVL")
 FILTER_COMBINATIONS=(
   "4 3"
-  "3 2"
-  "2 1"
 )
 
 # List of filters for selecting clinical trials for a given experiment

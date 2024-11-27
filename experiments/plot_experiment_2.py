@@ -9,8 +9,7 @@ from scipy.stats import ttest_rel
 OUTPUT_PATH = "experiments/figure_experiment_2.png"
 DATA_DIR = "data_ctgov"
 MODEL_ID = "pubmed-bert-sentence"
-# SUB_DIR = "cond-lvl-2_itrv-lvl-1_cluster-tsne-2_plot-tsne-2"
-SUB_DIR = "cond-lvl-4_itrv-lvl-3_cluster-tsne-2_plot-tsne-2"  # same as for experiment 1 (only minor change in how CTs are filtered)
+SUB_DIR = "cond-lvl-4_itrv-lvl-3_cluster-tsne-2_plot-tsne-2"  # same as for experiment 1
 COND_IDS = ["C01", "C04", "C14", "C20"]
 INPUT_COLORS = ["tab:blue", "tab:orange", "tab:green"]
 TARGET_TYPES = ["phase", "study_duration", "enrollment_count", "operational_rate"]

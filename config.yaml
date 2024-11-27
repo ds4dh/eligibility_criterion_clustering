@@ -8,8 +8,9 @@ USER_FILTERING: null  # null, intervention, condition, intersection
 OPTUNA_SAMPLER: tpe  # tpe (presumably better), random (seed presumably more stable)
 RANDOM_STATE: 0123
 LOAD_PARSED_DATA: false
-LOAD_EMBEDDINGS: false  # set to false if you change CHOSEN_COND/ITRV_LVL/IDS
+LOAD_EMBEDDINGS: false  # set this to false if you change CHOSEN_COND/ITRV_LVL/IDS
 LOAD_BERTOPIC_RESULTS: false
+REGENERATE_REPRESENTATIONS_AFTER_LOADING_BERTOPIC_RESULTS: false
 
 # Prediction  parameters
 PREDICTOR_TARGET_TYPES: [phase, status, study_duration, enrollment_count, operational_rate]
@@ -48,7 +49,8 @@ STATUS_MAP: null  # null to ignore
 ADDITIONAL_NEGATIVE_FILTER: {}  # {} to ignore // used to remove some eligibility criteria based on key-value mapping
 
 # Eligibility criteria embedding parameters
-MAX_ELIGIBILITY_CRITERIA_SAMPLES: 2_000_000  # ct-gov has maximum 1740170 criteria (maximum, if no filter is applied)
+MAX_EC_SAMPLES: 2_000_000  # ct-gov has maximum 1740170 criteria (maximum, if no filter is applied)
+MIN_EC_SAMPLES: 5_000  # this parameter is only used for experiment 3!
 EMBEDDING_BATCH_SIZE: 64
 EMBEDDING_MODEL_ID_MAP:
   pubmed-bert-sentence: pritamdeka/S-PubMedBert-MS-MARCO

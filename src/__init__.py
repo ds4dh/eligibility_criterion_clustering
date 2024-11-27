@@ -10,4 +10,5 @@ from .cluster_data import cluster_data_fn, run_experiment_1
 from .cluster_utils import ClusterGeneration, ClusterOutput, get_dim_red_model, set_seeds
 from .predict_data import run_experiment_2
 from .generate_utils import compute_scores
+from .generate_data import update_config, update_config_filters
 from .config import update_config
