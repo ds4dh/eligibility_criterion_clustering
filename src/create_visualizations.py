@@ -24,42 +24,42 @@ except:
 
 
 EMBED_MODEL_ID = "pubmed-bert-sentence"
-COND_TYPE_FILTER_SETS = [["C01"], ["C04"], ["C14"], ["C20"]]
 COND_FILTER_LVL = 4
 ITRV_FILTER_LVL = 3
 DATA_DIR = "data_ctgov"
-CT_FILE_DIR = os.path.join(DATA_DIR, "raw_files/NCT0030xxxx")
-CT_FILE_PATHS = [os.path.join(CT_FILE_DIR, p) for p in os.listdir(CT_FILE_DIR)]
-# CT_FILE_PATHS = [
-#     # C01 clinical trials
-#     "data_ctgov/raw_files/NCT0030xxxx/NCT00303550.json",
-#     "data_ctgov/raw_files/NCT0030xxxx/NCT00307489.json",
-#     "data_ctgov/raw_files/NCT0030xxxx/NCT00308048.json",
-    
-#     # C04 clinical trials
-#     "data_ctgov/raw_files/NCT0030xxxx/NCT00301847.json",
-#     "data_ctgov/raw_files/NCT0030xxxx/NCT00306969.json",
-#     "data_ctgov/raw_files/NCT0030xxxx/NCT00309556.json",
-    
-#     # C14 clinical trials
-#     "data_ctgov/raw_files/NCT0030xxxx/NCT00304226.json",
-#     "data_ctgov/raw_files/NCT0030xxxx/NCT00306735.json",
-#     "data_ctgov/raw_files/NCT0030xxxx/NCT00307307.json",
-    
-#     # C20 clinical trials
-#     "data_ctgov/raw_files/NCT0030xxxx/NCT00304538.json",
-#     "data_ctgov/raw_files/NCT0030xxxx/NCT00306969.json",
-#     "data_ctgov/raw_files/NCT0030xxxx/NCT00308620.json",
-# ]
 
 
 def main():
     """ Generate a few cluster output visualization for clinical trials coming
         from different condition type filters
     """
-    for cond_type_filter_set in COND_TYPE_FILTER_SETS:
+    cond_type_filter_sets = [["C01"], ["C04"], ["C14"], ["C20"]]
+    ct_file_dir = os.path.join(DATA_DIR, "raw_files/NCT0030xxxx")
+    ct_file_paths = [os.path.join(ct_file_dir, p) for p in os.listdir(ct_file_dir)]
+    # ct_file_paths = [
+    #     # C01 clinical trials
+    #     "data_ctgov/raw_files/NCT0030xxxx/NCT00303550.json",
+    #     "data_ctgov/raw_files/NCT0030xxxx/NCT00307489.json",
+    #     "data_ctgov/raw_files/NCT0030xxxx/NCT00308048.json",
+        
+    #     # C04 clinical trials
+    #     "data_ctgov/raw_files/NCT0030xxxx/NCT00301847.json",
+    #     "data_ctgov/raw_files/NCT0030xxxx/NCT00306969.json",
+    #     "data_ctgov/raw_files/NCT0030xxxx/NCT00309556.json",
+        
+    #     # C14 clinical trials
+    #     "data_ctgov/raw_files/NCT0030xxxx/NCT00304226.json",
+    #     "data_ctgov/raw_files/NCT0030xxxx/NCT00306735.json",
+    #     "data_ctgov/raw_files/NCT0030xxxx/NCT00307307.json",
+        
+    #     # C20 clinical trials
+    #     "data_ctgov/raw_files/NCT0030xxxx/NCT00304538.json",
+    #     "data_ctgov/raw_files/NCT0030xxxx/NCT00306969.json",
+    #     "data_ctgov/raw_files/NCT0030xxxx/NCT00308620.json",
+    # ]
+    for cond_type_filter_set in cond_type_filter_sets:
         create_visualizations_from_ct_paths_or_nct_ids(
-            ct_file_paths=CT_FILE_PATHS,
+            ct_file_paths=ct_file_paths,
             n_examples_to_generate=1,
             cond_type_filter_set=cond_type_filter_set,
         )
