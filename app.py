@@ -43,13 +43,13 @@ def serve_html():
         return jsonify({"error": "File not found"}), 404
 
 
-@app.before_request
-def redirect_to_https():
-    """ Redirect HTTP requests to HTTPS
-    """
-    if not request.is_secure:
-        url = request.url.replace("http://", "https://", 1)
-        return redirect(url, code=301)
+# @app.before_request
+# def redirect_to_https():
+#     """ Redirect HTTP requests to HTTPS
+#     """
+#     if not request.is_secure:
+#         url = request.url.replace("http://", "https://", 1)
+#         return redirect(url, code=301)
     
 
 @app.route("/get-latest-log", methods=["GET"])
