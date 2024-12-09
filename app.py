@@ -18,14 +18,16 @@ logger = config.CTxAILogger("INFO")
 app = Flask(__name__, template_folder="templates", static_folder="static")
 
 PREFIX_PATH = "/ct-risk/cluster"
+INDEX_PATH = "%s/" % PREFIX_PATH
 PREDICT_PATH = "%s/predict" % PREFIX_PATH
 VISUALIZE_PATH = "%s/visualize" % PREFIX_PATH
 SERVE_HTML_PATH = "%s/serve-html" % PREFIX_PATH
+GET_LATEST_LOG_PATH = "%s/get-latest-log" % PREFIX_PATH
 
 
-@app.route("/", methods=["GET"])
+@app.route(INDEX_PATH, methods=["GET"])
 def index():
-    """ Serve the HTML form for user input
+    """ Serve the HTML form for the main page with user input
     """
     return render_template("index.html")
 
@@ -52,7 +54,7 @@ def serve_html():
 #         return redirect(url, code=301)
     
 
-@app.route("/get-latest-log", methods=["GET"])
+@app.route(GET_LATEST_LOG_PATH, methods=["GET"])
 def get_latest_log():
     """ Serve the latest log line
     """
