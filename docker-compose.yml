@@ -3,11 +3,11 @@ services:
     image: ctxai_cluster:latest
     build: .
     ports:
-      - "8984:8984"
+      - "8998:8998"
     environment:
       - FLASK_ENV=production
     expose:
-      - 8984
+      - 8998
     volumes:
       - .:/app
     deploy:
@@ -22,4 +22,4 @@ services:
     ulimits:
       memlock: -1
       stack: 67108864
-    command: gunicorn --bind 0.0.0.0:8984 --threads=12 wsgi:app
+    command: gunicorn --bind 0.0.0.0:8998 --threads=12 wsgi:app

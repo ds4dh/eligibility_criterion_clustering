@@ -39,7 +39,7 @@ def run_curl_command(task: dict):
     query_json = json.dumps(query_dict)
     
     command = [
-        "curl", "-X", "POST", "http://0.0.0.0:8984/ct-risk/cluster/predict",
+        "curl", "-X", "POST", "http://0.0.0.0:8998/ct-risk/cluster/predict",
         "-H", "Content-Type: application/json",
         "-d", query_json,
     ]

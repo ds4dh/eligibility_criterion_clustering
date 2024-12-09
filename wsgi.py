@@ -1,8 +1,8 @@
 from app import app
 
 
-HOST_ADDRESS = '0.0.0.0'
-PORT_NUMBER = 8984
+HOST_ADDRESS = "0.0.0.0"
+PORT_NUMBER = 8998
 
 
 def main():
@@ -13,7 +13,7 @@ if __name__ == "__main__":
     main()
 
 
-# gunicorn --bind 0.0.0.0:8984 --threads=12 --certfile=utils/cert.pem --keyfile=utils/key.pem wsgi:app
+# gunicorn --bind 0.0.0.0:8998 --threads=12 --certfile=utils/cert.pem --keyfile=utils/key.pem wsgi:app
 
 
 # *** EXAMPLE JSON REQUEST ***
