@@ -120,6 +120,7 @@ class ClusterGeneration:
         )
         
         # Find best set of hyper-parameters
+        logger.info("Training clustering algorithm with %s reduced eligibility criterion embeddings" % len(X))
         objective = lambda trial: self.objective_fn(trial, X)
         study.optimize(
             func=objective,
@@ -942,12 +943,14 @@ class ClusterOutput:
 
 class CUML_TSNEForBERTopic(CUML_TSNE):
     def transform(self, X):
+        logger.info("Reducing %s eligibility criterion embedding dimensionality" % len(X))
         reduced_X = self.fit_transform(X)
         return reduced_X.to_host_array()
 
 
 class TSNEForBERTopic(TSNE):
     def transform(self, X):
+        logger.info("Reducing %s eligibility criterion embedding dimensionality" % len(X))
         reduced_X = self.fit_transform(X)
         return reduced_X
 

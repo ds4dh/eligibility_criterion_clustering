@@ -10,16 +10,19 @@ logger = config.CTxAILogger("INFO")
 import re
 import ast
 import json
+import requests
 import pickle
 import numpy as np
 import pandas as pd
 import torch
 from tqdm import tqdm
+from typing import Iterator
 
 # Data pipelines
 import nltk
 from nltk.tokenize import sent_tokenize  # from clinitokenizer.tokenize import clini_tokenize
 from difflib import SequenceMatcher
+import torchdata.datapipes.iter as dpi
 from torchdata.datapipes import functional_datapipe
 from torchdata.datapipes.iter import IterDataPipe, FileLister
 from torchdata.dataloader2 import DataLoader2, InProcessReadingService
@@ -69,37 +72,48 @@ class ClinicalTrialFilter(IterDataPipe):
     """ Read clinical trial json files, parse them and filter the ones that can
         be used for eligibility criteria representation learning
     """
-    def __init__(self, dp):
+    def __init__(self, dp, for_inference=False):
         super().__init__()
         self.dp = dp
+        self.for_inference = for_inference
         cfg = config.get_config()
         with open(cfg["MESH_CROSSWALK_PATH"], "r") as f:
             self.mesh_cw = json.load(f)
             
     def __iter__(self):
         for ct_path, ct_dict in self.dp:
+            
             # Load protocol and make sure it corresponds to the file name
             ct_dict = self.lower_keys(ct_dict)  # CT.gov updated json keys
             protocol = ct_dict["protocolsection"]
             derived = ct_dict["derivedsection"]
-            nct_id = protocol["identificationmodule"]["nctid"]
-            file_nct_id = os.path.split(ct_path)[-1].strip(".json")
-            assert nct_id == file_nct_id
+            if not self.for_inference:
+                nct_id = protocol["identificationmodule"]["nctid"]
+                file_nct_id = os.path.split(ct_path)[-1].strip(".json")
+                assert nct_id == file_nct_id
             
             # Check protocol belongs to the data and load criteria
             good_to_go, label, phases, conditions, cond_ids, itrv_ids =\
                 self.check_protocol(protocol, derived)
-            if good_to_go:
-                metadata = {
-                    "ct_path": ct_path,
-                    "label": label,
-                    "phases": phases,
-                    "conditions": conditions,
-                    "condition_ids": cond_ids,
-                    "intervention_ids": itrv_ids,
-                }
+            if not good_to_go: continue
+            
+            # Create metadata both for inference and training
+            metadata = {
+                "ct_path": ct_path,
+                "label": label,
+                "phases": phases,
+                "conditions": conditions,
+                "condition_ids": cond_ids,
+                "intervention_ids": itrv_ids,
+            }
+            
+            # Extract criteria text if used for training clusters
+            if not self.for_inference:
                 criteria_str = protocol["eligibilitymodule"]["eligibilitycriteria"]
-                yield metadata, criteria_str
+            else:
+                criteria_str = None
+                
+            yield metadata, criteria_str
     
     def lower_keys(self, dict_or_list_or_str: dict[str,dict|str]|list[str]|str):
         if isinstance(dict_or_list_or_str, dict):
@@ -121,25 +135,32 @@ class ClinicalTrialFilter(IterDataPipe):
             sample for eligibility criteria representation learning
         """
         # Check the status of the CT is either completed or terminated
-        status = protocol["statusmodule"]["overallstatus"].lower()
-        if status not in ["completed", "terminated"]:
-            return False, None, None, None, None, None
+        if not self.for_inference:
+            status = protocol["statusmodule"]["overallstatus"].lower()
+            if status not in ["completed", "terminated"]:
+                return False, None, None, None, None, None
+        else:
+            status = None
         
         # Check that the study is interventional
-        study_type = protocol["designmodule"]["studytype"].lower()
-        if study_type != "interventional":
-            return False, None, None, None, None, None
+        if not self.for_inference:
+            study_type = protocol["designmodule"]["studytype"].lower()
+            if study_type != "interventional":
+                return False, None, None, None, None, None
+        else:
+            study_type = None
         
         # Check the study is about a drug test
-        itrv_module = protocol["armsinterventionsmodule"]
-        try:
-            itrvs = itrv_module["interventionlist"]["intervention"]
-            itrv_types = [i["interventiontype"].lower() for i in itrvs]
-        except KeyError:
-            itrvs = itrv_module["interventions"]
-            itrv_types = [i["type"].lower() for i in itrvs]
-        if "drug" not in itrv_types:
-            return False, None, None, None, None, None
+        if not self.for_inference:
+            itrv_module = protocol["armsinterventionsmodule"]
+            try:
+                itrvs = itrv_module["interventionlist"]["intervention"]
+                itrv_types = [i["interventiontype"].lower() for i in itrvs]
+            except KeyError:
+                itrvs = itrv_module["interventions"]
+                itrv_types = [i["type"].lower() for i in itrvs]
+            if "drug" not in itrv_types:
+                return False, None, None, None, None, None
         
         # Check the study has defined phases, then record phases
         design_module = protocol["designmodule"]
@@ -152,17 +173,21 @@ class ClinicalTrialFilter(IterDataPipe):
         phases = [phase.replace(" ", "").lower() for phase in phases]
         
         # Check that the protocol has an eligibility criterion section
-        if "eligibilitycriteria" not in protocol["eligibilitymodule"]:
-            return False, None, None, None, None, None
+        if not self.for_inference:
+            if "eligibilitycriteria" not in protocol["eligibilitymodule"]:
+                return False, None, None, None, None, None
         
         # Check that the protocol has a condition list
-        cond_module = protocol["conditionsmodule"]
-        if "conditionlist" in cond_module:
-            conditions = cond_module["conditionlist"]["condition"]
-        elif "conditions" in cond_module:
-            conditions = cond_module["conditions"]
+        if not self.for_inference:
+            cond_module = protocol["conditionsmodule"]
+            if "conditionlist" in cond_module:
+                conditions = cond_module["conditionlist"]["condition"]
+            elif "conditions" in cond_module:
+                conditions = cond_module["conditions"]
+            else:
+                return False, None, None, None, None, None
         else:
-            return False, None, None, None, None, None
+            conditions = None
         
         # Try to load condition mesh ids
         cond_browse_module = derived.get("conditionbrowsemodule", {})
@@ -189,6 +214,7 @@ class ClinicalTrialFilter(IterDataPipe):
         itrv_tree_nums = self.convert_unique_ids_to_tree_nums(itrv_ids)
         
         # Return that the protocol can be processed, status, and phase list
+        # Note: for inference, only phase and cond/itrv_tree_nums are required
         return True, status, phases, conditions, cond_tree_nums, itrv_tree_nums
     
     def convert_unique_ids_to_tree_nums(self, unique_ids):
@@ -739,7 +765,7 @@ class EligibilityCriteriaFilter(IterDataPipe):
         
 @functional_datapipe("tokenize")
 class Tokenizer(IterDataPipe):
-    def __init__(self, dp: IterDataPipe, tokenizer):
+    def __init__(self, dp: IterDataPipe, tokenizer) -> None:
         """ Custom data pipeline to tokenize an batch of input strings, keeping
             the corresponding labels and returning input and label batches
         """
@@ -759,6 +785,63 @@ class Tokenizer(IterDataPipe):
             max_length=512,
             return_tensors="pt"
         )
+
+
+class CustomJsonParser(dpi.JsonParser):
+    """ Modificaion of dpi.JsonParser that handles empty files without error
+    """
+    def __iter__(self) -> Iterator[tuple[str, dict]]:
+        for file_name, stream in self.source_datapipe:
+            try:
+                data = stream.read()
+                stream.close()
+                yield file_name, json.loads(data, **self.kwargs)
+            except json.decoder.JSONDecodeError:
+                logger.info("Empty json file - skipping to next file.")
+                stream.close()
+                
+                
+class CustomCTDictNamer(IterDataPipe):
+    def __init__(self, dp: IterDataPipe) -> None:
+        """ Gives a name to clinical trial dictionaries
+        """
+        self.dp: list[dict] = dp
+        
+    def __iter__(self) -> Iterator[tuple[str, dict]]:
+        for ct_dict in self.dp:
+            ct_name = ct_dict\
+                .get("protocolSection", {})\
+                .get("identificationModule", {})\
+                .get("nctId", None)
+            yield ct_name, ct_dict
+            
+            
+class CustomNCTIdParser(IterDataPipe):
+    def __init__(
+        self,
+        dp: IterDataPipe,
+        api_server: str="https://clinicaltrials.gov/api/v2",
+        ct_format: str="json",
+    ) -> None:
+        """ Download clinical data from ClinicalTrials.gov given NCT-Ids
+        """
+        self.dp = dp
+        self.api_server = api_server
+        self.ct_format = ct_format
+    
+    def __iter__(self) -> Iterator[tuple[str, dict]]:
+        for nct_id in self.dp:
+            url = f"{self.api_server}/studies/{nct_id}?format={self.ct_format}"
+            response = requests.get(url)
+            if response.status_code == 200:
+                try:
+                    ct_name = f"{nct_id}.{self.ct_format}"
+                    ct_parsed = json.loads(response.content)
+                    yield ct_name, ct_parsed
+                except json.decoder.JSONDecodeError:
+                    logger.info("Empty json file - skipping to next file.")
+            else:
+                raise RuntimeError(f"NCTId {nct_id} not found in CT.gov database")
 
 
 def get_embeddings(
@@ -873,7 +956,7 @@ def generate_embeddings(
         a given model
     """
     # Get current configuration
-    logger.info("Running model to generate embeddings")
+    logger.info("Identifying similar eligibility criteria and embeddings them with %s" % embed_model_id)
     cfg = config.get_config()
     
     # Load model

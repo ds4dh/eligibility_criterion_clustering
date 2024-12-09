@@ -7,23 +7,21 @@ try:
 except:
     from . import config
 logger = config.CTxAILogger("INFO")
-import pandas as pd
-import torchdata.datapipes.iter as dpi
-from collections import defaultdict
 try:
     from parse_data import CustomJsonParser
     from parse_utils import ClinicalTrialFilter
     from cluster_utils import ClusterOutput
     from cluster_data import cluster_data_fn
-    from generate_utils import compute_scores, generate_llm_response
-    from config import update_config
+    from generate_utils import compute_scores, generate_llm_response, update_config_filters
 except:
     from .parse_data import CustomJsonParser
     from .parse_utils import ClinicalTrialFilter
     from .cluster_utils import ClusterOutput
     from .cluster_data import cluster_data_fn
-    from .generate_utils import compute_scores, generate_llm_response
-    from .config import update_config
+    from .generate_utils import compute_scores, generate_llm_response, update_config_filters
+import pandas as pd
+import torchdata.datapipes.iter as dpi
+from collections import defaultdict
 from tqdm import tqdm
 
 
@@ -99,7 +97,11 @@ def main():
             break
         
         # Clustering method for ec-section generation
-        update_config_filters(ct_sample)  # /!\ this updates "cfg" /!\
+        update_config_filters(
+            ct_data=ct_sample,
+            cond_filter_lvl=COND_FILTER_LVL,
+            itrv_filter_lvl=ITRV_FILTER_LVL,            
+        )  # /!\ this updates "cfg" /!\
         try:
             cluster_output = cluster_data_fn(
                 embed_model_id=EMBED_MODEL_ID,
@@ -363,58 +365,6 @@ def format_ec_section(ec_list: list[str]) -> str:
     ec_section += "\n\nExclusion criteria:\n" + "\n".join(exclusion_criteria)
     
     return ec_section
-
-
-def update_config_filters(ct_data: dict, **kwargs) -> None:
-    """ Update running configuration with phase, condition and intervention
-        filters for later clustering 
-        
-    Args:
-        ct_data (dict): clinical trial data
-    """
-    # Identify phase(s), condition(s), and intervention(s) of the clinical trial
-    cond_ids = extract_ids_at_lvl(ct_data["condition_ids"], COND_FILTER_LVL)
-    itrv_ids = extract_ids_at_lvl(ct_data["intervention_ids"], ITRV_FILTER_LVL)
-    to_update = {
-        "CHOSEN_PHASES": ct_data["phases"],
-        "CHOSEN_COND_IDS": cond_ids,
-        "CHOSEN_ITRV_IDS": itrv_ids,
-    }
-    if "CHOSEN_COND_LVL" in kwargs:
-        to_update.update({"CHOSEN_COND_LVL": COND_FILTER_LVL})
-    if "CHOSEN_ITRV_LVL" in kwargs:
-        to_update.update({"CHOSEN_ITRV_LVL": ITRV_FILTER_LVL})
-    logger.info("Evaluating ec-generation for ct with: %s" % to_update)
-    
-    # Make sure that evaluated clinical trial is not considered for clustering 
-    to_update.update({
-        "DO_EVALUATE_CLUSTERING": True,
-        "ADDITIONAL_NEGATIVE_FILTER": {"ct path": ct_data["ct_path"]},
-        "MAX_EC_SAMPLES": 50_000,
-        "N_OPTUNA_TRIALS": 25,
-    })
-    
-    # Add any kwarg argument to the configuration update dictionary
-    for key, value in kwargs.items():
-        to_update[key] = value
-    
-    # Update globally shared configuration with current information
-    update_config(request_data=to_update)
-
-
-def extract_ids_at_lvl(ids: str, lvl: int) -> list[str]:
-    """ Extract condition or intervention id(s) up to a certain MeSH tree level
-
-    Args:
-        ids (str): raw condition or intervention id(s)
-        lvl (int): level up to which id(s) are considered
-
-    Returns:
-        list[str]: list of unique ids up to the required level
-    """
-    flat_ids = [id for id_sublist in ids for id in id_sublist]
-    extracted_ids = [".".join(id.split(".")[:lvl]) for id in flat_ids]
-    return list(set(extracted_ids))
 
 
 def get_evaluated_ct_dataset(

@@ -1,0 +1,73 @@
+html, body {
+    font-family: "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    margin: 10px;
+    padding: 0;
+}
+
+h1 {
+    color: #333;
+}
+
+form {
+    max-width: 500px;
+}
+
+label {
+    display: block;
+    margin-bottom: 5px;
+    font-size: 16px;
+}
+
+input, select, button {
+    box-sizing: border-box; /* Ensures padding and borders are included in width */
+    width: 100%; /* Ensures all elements have the same width */
+    max-width: 100%; /* Prevents overflow */
+    padding: 8px; /* Consistent padding */
+    margin-bottom: 15px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 16px;
+}
+
+button {
+    background-color: #007BFF;
+    color: white;
+    border: none;
+    cursor: pointer;
+    position: relative; /* Allows positioning spinner inside the button */
+    display: inline-flex; /* Align text and spinner inline */
+    align-items: center;
+    justify-content: center;
+    font-size: 16px; /* Consistent font size for text */
+    padding: 10px 20px; /* Add consistent padding */
+    height: 40px;
+    width: 100%;
+}
+
+button:hover {
+    background-color: #0056b3;
+}
+
+button .spinner {
+    display: none; /* Initially hidden */
+    border: 3px solid #f3f3f3; /* Light grey */
+    border-top: 3px solid white; /* White spinner */
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    animation: spin 1s linear infinite;
+}
+
+button.loading .spinner {
+    display: inline-block; /* Show spinner when button is loading */
+    margin-left: 10px; /* Add space between spinner and text */
+}
+
+button.loading .button-text {
+    visibility: visible; /* Keep text visible */
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}

@@ -8,10 +8,8 @@ logger = config.CTxAILogger("INFO")
 
 # Utils
 import csv
-import json
 import torchdata.datapipes.iter as dpi
 from tqdm import tqdm
-from typing import Iterator
 from torchdata.dataloader2 import (
     DataLoader2,
     InProcessReadingService,
@@ -24,6 +22,7 @@ try:
         CriteriaParser,
         CriteriaCSVWriter,
         CustomXLSXLineReader,
+        CustomJsonParser,
     )
 except:
     from .cluster_utils import set_seeds
@@ -32,6 +31,7 @@ except:
         CriteriaParser,
         CriteriaCSVWriter,
         CustomXLSXLineReader,
+        CustomJsonParser,
     )
 
 
@@ -125,20 +125,6 @@ def get_dataset(data_path: str, environment: str) -> dpi.IterDataPipe:
     written = CriteriaCSVWriter(parsed_samples)
     return written
 
-
-class CustomJsonParser(dpi.JsonParser):
-    """ Modificaion of dpi.JsonParser that handles empty files without error
-    """
-    def __iter__(self) -> Iterator[tuple[str, dict]]:
-        for file_name, stream in self.source_datapipe:
-            try:
-                data = stream.read()
-                stream.close()
-                yield file_name, json.loads(data, **self.kwargs)
-            except json.decoder.JSONDecodeError:
-                logger.info("Empty json file - skipping to next file.")
-                stream.close()
-            
 
 if __name__ == "__main__":
     main()

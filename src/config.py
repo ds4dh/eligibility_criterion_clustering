@@ -2,6 +2,7 @@ import os
 import yaml
 import logging
 import threading
+from datetime import datetime
 
 configuration = None  # global configuration dictionary
 config_lock = threading.Lock()  # lock for thread-safe configuration updates
@@ -131,33 +132,59 @@ def align_config(cfg):
 
 
 class CTxAILogger:
-    """ Copied from BERTopic -> https://maartengr.github.io/BERTopic/index.html
+    """ Modified from BERTopic -> https://maartengr.github.io/BERTopic/index.html
     """
-    def __init__(self, level):
+    def __init__(self, level, log_path="logs/app.log"):
         self.logger = logging.getLogger("CTxAI")
         self.set_level(level)
-        self._add_handler()
+        self.log_path = self._set_log_file(log_path)
+        self._add_handlers()
         self.logger.propagate = False
-
+        
+    def _set_log_file(self, log_path=None, timed=False):
+        # Check log dir exists
+        if log_path is None: return None
+        log_dir = os.path.dirname(log_path)
+        os.makedirs(log_dir, exist_ok=True)
+        
+        # Create timed log path if required
+        if timed:
+            log_name_with_ext = os.path.basename(log_path)
+            log_name, log_ext = os.path.splitext(log_name_with_ext)
+            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")
+            log_path = os.path.join(log_dir, f"{log_name}_{timestamp}{log_ext}")
+        
+        return log_path
+    
     def info(self, message):
         self.logger.info(f"{message}")
-
+        
     def warning(self, message):
         self.logger.warning(f"WARNING: {message}")
         
     def error(self, message):
         self.logger.error(f"ERROR: {message}")
-
+        
     def set_level(self, level):
         levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
         if level in levels:
             self.logger.setLevel(level)
-
-    def _add_handler(self):
+            
+    def _add_handlers(self):
+        # StreamHandler for console logging
         sh = logging.StreamHandler()
         sh.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(message)s"))
-        self.logger.addHandler(sh)
-
-        # Remove duplicate handlers
-        if len(self.logger.handlers) > 1:
-            self.logger.handlers = [self.logger.handlers[0]]
+        self._add_handler_if_unique(sh)
+        
+        # Optional FileHandler for file logging
+        if self.log_path is not None:
+            fh = logging.FileHandler(self.log_path)
+            fh.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(message)s"))
+            self._add_handler_if_unique(fh)
+    
+    def _add_handler_if_unique(self, new_handler: logging.Handler):
+        for handler in self.logger.handlers:
+            if handler.__class__ == new_handler.__class__\
+            and handler.formatter._fmt == new_handler.formatter._fmt:
+                return  # avoid adding duplicate handler
+        self.logger.addHandler(new_handler)

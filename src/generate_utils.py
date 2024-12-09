@@ -7,6 +7,10 @@ except:
 logger = config.CTxAILogger("INFO")
 import logging
 logging.getLogger("transformers").setLevel(logging.ERROR)
+try:
+    from .config import update_config
+except:
+    from .config import update_config
 import torch
 import openai
 from openai import OpenAI
@@ -313,3 +317,64 @@ def generate_llm_response(
         time.sleep(2 ** attempt)
         
     return "Failed to generate EC section after multiple attempts."
+
+
+def update_config_filters(
+    ct_data: dict,
+    cond_filter_lvl: int,
+    itrv_filter_lvl: int,
+    **kwargs,
+) -> None:
+    """ Update running configuration with phase, condition and intervention
+        filters for later clustering 
+        
+    Args:
+        ct_data (dict): clinical trial data
+    """
+    # Identify phase(s), condition(s), and intervention(s) of the clinical trial
+    cond_ids = extract_ids_at_lvl(ct_data["condition_ids"], cond_filter_lvl)
+    itrv_ids = extract_ids_at_lvl(ct_data["intervention_ids"], itrv_filter_lvl)
+    to_update = {
+        "CHOSEN_PHASES": ct_data["phases"],
+        "CHOSEN_COND_IDS": cond_ids,
+        "CHOSEN_ITRV_IDS": itrv_ids,
+    }
+    if "CHOSEN_COND_LVL" in kwargs:
+        to_update.update({"CHOSEN_COND_LVL": cond_filter_lvl})
+    if "CHOSEN_ITRV_LVL" in kwargs:
+        to_update.update({"CHOSEN_ITRV_LVL": itrv_filter_lvl})
+    logger.info("Evaluating ec-generation for ct with: %s" % to_update)
+    
+    # Make sure that evaluated clinical trial is not considered for clustering 
+    to_update.update({
+        "DO_EVALUATE_CLUSTERING": True,
+        "ADDITIONAL_NEGATIVE_FILTER": {"ct path": ct_data["ct_path"]},
+        "MAX_EC_SAMPLES": 50_000,
+        "N_OPTUNA_TRIALS": 25,
+    })
+    
+    # Add any kwarg argument to the configuration update dictionary
+    for key, value in kwargs.items():
+        to_update[key] = value
+    
+    # Update globally shared configuration with current information
+    update_config(request_data=to_update)
+
+
+def extract_ids_at_lvl(
+    ids: str,
+    lvl: int|None=None,
+) -> list[str]:
+    """ Extract condition or intervention id(s) up to a certain MeSH tree level
+
+    Args:
+        ids (str): raw condition or intervention id(s)
+        lvl (int): level up to which id(s) are considered
+        
+    Returns:
+        list[str]: list of unique ids up to the required level
+    """
+    extracted_ids = [id for id_sublist in ids for id in id_sublist]
+    if lvl is not None:
+        extracted_ids = [".".join(id.split(".")[:lvl]) for id in extracted_ids]
+    return list(set(extracted_ids))

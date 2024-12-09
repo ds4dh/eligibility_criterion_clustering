@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CT Eligibility Visualization</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <h1>CT Eligibility Visualization</h1>
+    <form id="visualizationForm">
+        <label for="DEMO_MODE">Demo Mode:</label>
+        <select id="DEMO_MODE" name="DEMO_MODE" required>
+            <option value="nct_id">NCT ID</option>
+            <option value="ct_file">CT file</option>
+            <option value="ct_info">CT info</option>
+        </select><br><br>
+
+        <div id="nctInput">
+            <label for="TARGET_NCT_ID">Target NCT ID:</label>
+            <input
+                type="text"
+                id="TARGET_NCT_ID"
+                name="TARGET_NCT_ID"
+                value="NCT00306969"
+                onfocus="clearDefault(this)" 
+                onblur="restoreDefault(this)"
+            ><br><br>
+        </div>
+
+        <div id="fileInput" style="display: none;">
+            <label for="TARGET_CT_FILE">Upload Target CT File (JSON format):</label>
+            <input type="file" id="TARGET_CT_FILE" name="TARGET_CT_FILE" accept=".json"><br><br>
+        </div>
+
+        <div id="ctInfoInput" style="display: none;">
+            <label for="CHOSEN_PHASES">Target Phases:</label>
+            <input
+                type="text"
+                id="CHOSEN_PHASES"
+                name="CHOSEN_PHASES"
+                value="phase1,phase2"
+                onfocus="clearDefault(this)"
+                onblur="restoreDefault(this)"
+            ><br><br>
+
+            <label for="CHOSEN_COND_IDS">Target Condition ID(s):</label>
+            <input
+                type="text"
+                id="CHOSEN_COND_IDS"
+                name="CHOSEN_COND_IDS"
+                value="C04.557.386,C15.604.515.569,C20.683.515.761"
+                onfocus="clearDefault(this)"
+                onblur="restoreDefault(this)"
+            ><br><br>
+
+            <label for="CHOSEN_ITRV_IDS">Target Intervention ID(s):</label>
+            <input
+                type="text"
+                id="CHOSEN_ITRV_IDS"
+                name="CHOSEN_ITRV_IDS"
+                value="D02.455.426.559.847.638.960.423,D04.615"
+                onfocus="clearDefault(this)"
+                onblur="restoreDefault(this)"
+            ><br><br>
+        </div>
+
+        <button type="submit" id="visualizeButton">
+            <span class="button-text">Visualize</span>
+            <div class="spinner"></div>
+        </button>
+    </form>
+
+    <div id="logContainer" style="display: none; margin-top: 20px;">
+        <h2>Generating Visualization...</h2>
+        <p id="logOutput" style="font-family: monospace; white-space: pre-wrap;"></p>
+    </div>
+
+    <div id="visualizationContainer" style="display: none; margin-top: 20px;">
+        <h2>Visualization</h2>
+        <iframe
+            id="visualizationFrame"
+            style="width: 100%; height: 800px; border: 1px solid #ccc;"
+            hidden>
+        </iframe>
+    </div>
+
+    <script>
+        const demoModeSelect = document.getElementById('DEMO_MODE');
+        const nctInput = document.getElementById('nctInput');
+        const fileInput = document.getElementById('fileInput');
+        const ctInfoInput = document.getElementById('ctInfoInput');
+
+        demoModeSelect.addEventListener('change', () => {
+            const selectedMode = demoModeSelect.value;
+            nctInput.style.display = selectedMode === 'nct_id' ? 'block' : 'none';
+            fileInput.style.display = selectedMode === 'ct_file' ? 'block' : 'none';
+            ctInfoInput.style.display = selectedMode === 'ct_info' ? 'block' : 'none';
+        });
+
+        document.getElementById('visualizationForm').addEventListener('submit', async (event) => {
+            event.preventDefault();
+            
+            const formData = new FormData(event.target);
+            const demoMode = formData.get('DEMO_MODE');
+            const visualizeButton = document.getElementById('visualizeButton');
+            const logContainer = document.getElementById('logContainer');
+            const logOutput = document.getElementById('logOutput');
+            const visualizationContainer = document.getElementById('visualizationContainer');
+            const visualizationFrame = document.getElementById('visualizationFrame');
+            
+            // Hide both containers initially
+            logContainer.style.display = "block"; // Show the log container
+            visualizationContainer.style.display = "none"; // Hide the visualization container
+            visualizationFrame.hidden = true; // Hide the iframe
+            logOutput.textContent = ""; // Clear previous logs
+        
+            // Update button text and show spinner
+            visualizeButton.classList.add('loading');
+            visualizeButton.querySelector('.button-text').textContent = 'Generating (can take a few minutes)';
+            
+            const requestData = {};
+            if (demoMode === 'ct_file') {
+                const fileInput = document.getElementById('TARGET_CT_FILE');
+                if (fileInput.files.length === 0) {
+                    alert('Please upload a file.');
+                    resetButton();
+                    return;
+                }
+                
+                const file = fileInput.files[0];
+                const fileContents = await file.text();
+                try {
+                    requestData.TARGET_CT_DICT = JSON.parse(fileContents);
+                } catch (error) {
+                    alert('Invalid JSON file.');
+                    resetButton();
+                    return;
+                }
+            } else if (demoMode === 'nct_id') {
+                requestData.TARGET_NCT_ID = formData.get('TARGET_NCT_ID');
+            } else if (demoMode === 'ct_info') {
+                requestData.CHOSEN_PHASES = formData.get('CHOSEN_PHASES').split(',').map(s => s.trim());
+                requestData.CHOSEN_COND_IDS = formData.get('CHOSEN_COND_IDS').split(',').map(s => s.trim());
+                requestData.CHOSEN_ITRV_IDS = formData.get('CHOSEN_ITRV_IDS').split(',').map(s => s.trim());
+            }
+            requestData.DEMO_MODE = demoMode;
+            
+            let pollingInterval;
+            try {
+                // Start polling for log updates
+                pollingInterval = setInterval(async () => {
+                    const logResponse = await fetch('/get-latest-log');
+                    if (logResponse.ok) {
+                        const logResult = await logResponse.json();
+                        logOutput.textContent = logResult.log;
+                    }
+                }, 1000);
+                
+                const response = await fetch('/ct-risk/cluster/visualize', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(requestData),
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    const htmlPath = result.html_path;
+                    
+                    visualizationFrame.src = htmlPath; // Load the visualization file
+                    visualizationFrame.hidden = false; // Show the iframe
+                    visualizationContainer.style.display = "block"; // Show the visualization container
+                    logContainer.style.display = "none"; // Hide the log container
+                } else {
+                    const errorText = await response.json();
+                    alert('Error: ' + errorText.error);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('An error occurred while processing your request.');
+            } finally {
+                // Stop polling for logs
+                clearInterval(pollingInterval);
+                
+                // Reset button to original state
+                resetButton();
+            }
+            
+            function resetButton() {
+                visualizeButton.classList.remove('loading');
+                visualizeButton.querySelector('.button-text').textContent = 'Visualize';
+            }
+        });
+
+        function clearDefault(element) {
+            if (element.value === element.defaultValue) {
+                element.value = ""; // Clear the field when focused if it matches the default value
+            }
+        }
+    
+        function restoreDefault(element) {
+            if (element.value.trim() === "") {
+                element.value = element.defaultValue; // Restore the default value if the field is empty
+            }
+        }
+    </script>
+</body>
+</html>

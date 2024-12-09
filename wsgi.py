@@ -13,6 +13,9 @@ if __name__ == "__main__":
     main()
 
 
+# gunicorn --bind 0.0.0.0:8984 --threads=12 --certfile=utils/cert.pem --keyfile=utils/key.pem wsgi:app
+
+
 # *** EXAMPLE JSON REQUEST ***
 # {
 #     "ENVIRONMENT": "ctxai_dev",

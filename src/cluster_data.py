@@ -86,7 +86,7 @@ def cluster_data_fn(
     
     # Load BERTopic cluster representation from previous run (only for ctgov)
     else:
-        logger.info("Loading BERTopic model trained on eligibility criteria embeddings")
+        logger.info("Loading clustering model trained on eligibility criteria embeddings")
         topic_model = BERTopic.load(bertopic_ckpt_path)
         if cfg["REGENERATE_REPRESENTATIONS_AFTER_LOADING_BERTOPIC_RESULTS"]:
             topic_model.update_topics(
@@ -132,7 +132,7 @@ def train_bertopic_model(
     )
     
     # Train BERTopic model using raw text documents and pre-computed embeddings
-    logger.info(f"Running bertopic algorithm on {len(raw_txts)} embeddings")
+    logger.info(f"Running BERTopic-like pipeline on {len(raw_txts)} embeddings")
     topic_model = topic_model.fit(raw_txts, embeddings)
     # topics = topic_model.reduce_outliers(raw_txts, topics)
     return topic_model
