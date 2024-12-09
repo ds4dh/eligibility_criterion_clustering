@@ -15,14 +15,20 @@ from src import (
 config.load_default_config()
 logger = config.CTxAILogger("INFO")
 
-app = Flask(__name__, template_folder="templates", static_folder="static")
-
 PREFIX_PATH = "/ct-risk/cluster"
 INDEX_PATH = "%s/" % PREFIX_PATH
 PREDICT_PATH = "%s/predict" % PREFIX_PATH
 VISUALIZE_PATH = "%s/visualize" % PREFIX_PATH
 SERVE_HTML_PATH = "%s/serve-html" % PREFIX_PATH
 GET_LATEST_LOG_PATH = "%s/get-latest-log" % PREFIX_PATH
+STATIC_URL_PATH = "%s/static" % PREFIX_PATH
+
+app = Flask(
+    import_name=__name__,
+    template_folder="templates",
+    static_folder="static",
+    static_url_path=STATIC_URL_PATH,
+)
 
 
 @app.route(INDEX_PATH, methods=["GET"])
