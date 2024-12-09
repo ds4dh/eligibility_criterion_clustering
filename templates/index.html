@@ -150,7 +150,7 @@
             try {
                 // Start polling for log updates
                 pollingInterval = setInterval(async () => {
-                    const logResponse = await fetch('/get-latest-log');
+                    const logResponse = await fetch('/ct-risk/cluster/get-latest-log');
                     if (logResponse.ok) {
                         const logResult = await logResponse.json();
                         logOutput.textContent = logResult.log;
