@@ -9,7 +9,13 @@ from .parse_utils import (
     CustomNCTIdParser,
 )
 from .cluster_data import cluster_data_fn, run_experiment_1
-from .cluster_utils import ClusterGeneration, ClusterOutput, get_dim_red_model, set_seeds
+from .cluster_utils import (
+    ClusterGeneration,
+    ClusterOutput,
+    get_dim_red_model,
+    set_seeds,
+    redirect_tqdm_to_logger,
+)
 from .predict_data import run_experiment_2
 from .generate_utils import compute_scores
 from .create_visualizations import (

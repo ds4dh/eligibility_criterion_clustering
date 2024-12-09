@@ -1,5 +1,6 @@
 # Config
 import os
+import sys
 try:
     import config
 except:
@@ -14,25 +15,20 @@ import random
 import numpy as np
 import pandas as pd
 import plotly.express as px
+from bertopic import BERTopic
 from itertools import product
 from collections import defaultdict
 from dataclasses import dataclass, asdict
-from bertopic import BERTopic
+from contextlib import contextmanager
+import logging
+logging.getLogger("distributed.utils_perf").setLevel(logging.ERROR)
 
 # Optimization
 import optuna
 optuna.logging.set_verbosity(optuna.logging.WARNING)
 from optuna.samplers import TPESampler, RandomSampler
-from dask_cuda import LocalCUDACluster
-from dask.distributed import Client
 from cuml import HDBSCAN
 from cuml.metrics.cluster import silhouette_score
-
-# Error handling for GPU
-import pynvml
-import rmm
-import logging
-logging.getLogger("distributed.utils_perf").setLevel(logging.ERROR)
 
 # Evaluation
 import torch
@@ -74,42 +70,7 @@ class ClusterGeneration:
             self.sampler = TPESampler(seed=self.random_state)
         else:
             self.sampler = RandomSampler(seed=self.random_state)
-    
-    def fit_old(self, X: np.ndarray) -> dict:
-        """ Use optuna to determine best set of cluster parameters
-        """
-        with LocalCUDACluster(
-            n_workers=1,
-            processes=True,
-        ) as cluster:
-            with Client(cluster, timeout="120s") as client:
-                
-                # GPU memory management
-                pynvml.nvmlInit()
-                rmm.reinitialize(managed_memory=True)
-                
-                # Initialize optuna study
-                study = optuna.create_study(
-                    sampler=self.sampler,
-                    direction="maximize",
-                )
-                
-                # Find best set of hyper-parameters
-                objective = lambda trial: self.objective_fn(trial, X)
-                study.optimize(
-                    func=objective,
-                    n_trials=self.n_optuna_trials,
-                    show_progress_bar=True,
-                    gc_after_trial=True,
-                )
-                
-                # GPU memory management
-                pynvml.nvmlShutdown()
-                
-        self.best_hyper_params = study.best_params
-        self.labels_ = self.predict(X)
-        return self
-    
+                        
     def fit(self, X: np.ndarray) -> dict:
         """ Use optuna to determine best set of cluster parameters
         """
@@ -120,15 +81,17 @@ class ClusterGeneration:
         )
         
         # Find best set of hyper-parameters
-        logger.info("Training clustering algorithm with %s reduced eligibility criterion embeddings" % len(X))
+        logger_prefix = "[Training clustering algorithm with %s reduced eligibility criterion embeddings] " % len(X)
+        logger_suffix = " [Optuna study optimizing cluster algorithm hyper-parameters]"
         objective = lambda trial: self.objective_fn(trial, X)
-        study.optimize(
-            func=objective,
-            n_trials=self.n_optuna_trials,
-            show_progress_bar=True,
-            gc_after_trial=True,
-            n_jobs=1,
-        )
+        with redirect_tqdm_to_logger(prefix=logger_prefix, suffix=logger_suffix):
+            study.optimize(
+                func=objective,
+                n_trials=self.n_optuna_trials,
+                show_progress_bar=True,
+                gc_after_trial=True,
+                n_jobs=1,
+            )
         
         self.best_hyper_params = study.best_params
         self.labels_ = self.predict(X)
@@ -1025,3 +988,29 @@ def get_dim_red_model(algorithm: str, dim: int, n_samples: int):
     # Invalid name
     else:
         raise ValueError("Invalid name for dimensionality reduction algorithm")
+
+
+@contextmanager
+def redirect_tqdm_to_logger(prefix: str="", suffix: str=""):
+    class TqdmToLogger:
+        def __init__(self, logger: config.CTxAILogger, prefix: str, suffix: str):
+            self.logger = logger
+            self.prefix = prefix
+            self.suffix = suffix
+            self.buf = ""
+            
+        def write(self, message: str):
+            # Filter out empty or redundant messages
+            if message.strip():
+                self.logger.info(f"{self.prefix}{message.strip()}{self.suffix}")
+                
+        def flush(self):
+            pass  # no-op for compatibility
+    
+    # Redirect tqdm output to global logger
+    original_stderr = sys.stderr
+    sys.stderr = TqdmToLogger(logger, prefix, suffix)
+    try:
+        yield
+    finally:
+        sys.stderr = original_stderr  # restore the original stderr

@@ -2,8 +2,10 @@
 import os
 try:
     import config
+    from cluster_utils import redirect_tqdm_to_logger
 except:
     from . import config
+    from .cluster_utils import redirect_tqdm_to_logger
 logger = config.CTxAILogger("INFO")
 
 # Utils
@@ -955,11 +957,8 @@ def generate_embeddings(
     """ Generate a set of embeddigns from data in a given input directory, using
         a given model
     """
-    # Get current configuration
-    logger.info("Identifying similar eligibility criteria and embeddings them with %s" % embed_model_id)
-    cfg = config.get_config()
-    
     # Load model
+    cfg = config.get_config()
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
     model, tokenizer, pooling_fn = get_embedding_model_pipeline(embed_model_id)
     model = model.to(device)
@@ -978,21 +977,29 @@ def generate_embeddings(
     # Go through data pipeline
     raw_txts, metadatas = [], []
     embeddings = torch.empty((0, model.config.hidden_size))
-    for encoded, raw_txt, metadata in tqdm(
-        iterable=dl, desc="Embedding eligibility criteria"
+    with redirect_tqdm_to_logger(
+        prefix="[Identifying similar eligibility criteria] ",
+        suffix=f" [Embedding them with {embed_model_id}]",
     ):
-        
-        # Compute embeddings for this batch
-        encoded = {k: v.to(device) for k, v in encoded.items()}
-        with torch.no_grad():
-            outputs = model(**encoded)
-        ec_embeddings = pooling_fn(encoded, outputs)
-        
-        # Record model outputs (tensor), input texts and corresponding labels
-        embeddings = torch.cat((embeddings, ec_embeddings.cpu()), dim=0)
-        raw_txts.extend(raw_txt)
-        metadatas.extend(metadata)
-        if len(raw_txts) > cfg["MAX_EC_SAMPLES"]: break
+        with tqdm(desc="- Found 0 eligibility criteria", bar_format="{desc}") as pbar:
+            for idx, (encoded, raw_txt, metadata) in enumerate(dl, start=1):
+                
+                # Compute embeddings for this batch
+                encoded = {k: v.to(device) for k, v in encoded.items()}
+                with torch.no_grad():
+                    outputs = model(**encoded)
+                ec_embeddings = pooling_fn(encoded, outputs)
+                
+                # Record model outputs (tensor), input texts and corresponding labels
+                embeddings = torch.cat((embeddings, ec_embeddings.cpu()), dim=0)
+                raw_txts.extend(raw_txt)
+                metadatas.extend(metadata)
+                if len(raw_txts) > cfg["MAX_EC_SAMPLES"]: break
+                
+                # Update the progress bar description
+                n_ec_found = (idx - 1) * cfg["EMBEDDING_BATCH_SIZE"]
+                pbar.set_description("Found at least %s eligibility criteria" % n_ec_found)
+                pbar.update(1)
     
     # Make sure gpu memory is made free for report_cluster
     torch.cuda.empty_cache()

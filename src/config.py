@@ -134,12 +134,18 @@ def align_config(cfg):
 class CTxAILogger:
     """ Modified from BERTopic -> https://maartengr.github.io/BERTopic/index.html
     """
-    def __init__(self, level, log_path="logs/app.log"):
+    def __init__(
+        self,
+        level: str,
+        log_path: str="logs/app.log",
+        max_log_file_lines: int=1000,
+    ):
         self.logger = logging.getLogger("CTxAI")
         self.set_level(level)
         self.log_path = self._set_log_file(log_path)
         self._add_handlers()
         self.logger.propagate = False
+        self.max_log_file_lines = max_log_file_lines
         
     def _set_log_file(self, log_path=None, timed=False):
         # Check log dir exists
@@ -157,12 +163,15 @@ class CTxAILogger:
         return log_path
     
     def info(self, message):
+        self._truncate_log_file()
         self.logger.info(f"{message}")
         
     def warning(self, message):
+        self._truncate_log_file()
         self.logger.warning(f"WARNING: {message}")
         
     def error(self, message):
+        self._truncate_log_file()
         self.logger.error(f"ERROR: {message}")
         
     def set_level(self, level):
@@ -188,3 +197,22 @@ class CTxAILogger:
             and handler.formatter._fmt == new_handler.formatter._fmt:
                 return  # avoid adding duplicate handler
         self.logger.addHandler(new_handler)
+        
+    def _truncate_log_file(self):
+        """ Truncate the log file if it exceeds the maximum number of lines
+        """
+        if self.log_path is None or not os.path.exists(self.log_path):
+            return
+        
+        # Keep only the last max_log_file_lines lines
+        try:
+            with open(self.log_path, "r+") as log_file:
+                lines = log_file.readlines()
+                if len(lines) > self.max_log_file_lines:
+                    log_file.seek(0)
+                    log_file.writelines(lines[-self.max_log_file_lines:])
+                    log_file.truncate()
+                    
+        # Log any errors during truncation (will appear in the console log)
+        except Exception as e:
+            self.logger.warning(f"Failed to truncate log file: {e}")
