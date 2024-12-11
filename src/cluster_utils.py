@@ -812,7 +812,7 @@ class ClusterOutput:
             for trace in fig.data:
                 if 'size' in trace.marker:
                     trace.marker.size = [s * ms_factor for s in trace.marker.size]
-                
+                    
             # Save image and sets plot_path
             plot_tag = "top_%i" % top_k if do_top_k else "all"
             plot_name = "cluster_plot_%s.png" % plot_tag

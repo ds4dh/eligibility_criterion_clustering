@@ -9,7 +9,7 @@
 <body>
     <h1>CT Eligibility Visualization</h1>
     <form id="visualizationForm">
-        <label for="DEMO_MODE">Demo Mode:</label>
+        <label for="DEMO_MODE">Demo mode:</label>
         <select id="DEMO_MODE" name="DEMO_MODE" required>
             <option value="nct_id">NCT ID</option>
             <option value="ct_file">CT file</option>
@@ -29,12 +29,12 @@
         </div>
 
         <div id="fileInput" class="input-section hidden">
-            <label for="TARGET_CT_FILE">Upload Target CT File (JSON format):</label>
+            <label for="TARGET_CT_FILE">Upload target CT file (JSON format):</label>
             <input type="file" id="TARGET_CT_FILE" name="TARGET_CT_FILE" accept=".json"><br><br>
         </div>
 
         <div id="ctInfoInput" class="input-section hidden">
-            <label for="CHOSEN_PHASES">Target Phases:</label>
+            <label for="CHOSEN_PHASES">Target phases:</label>
             <input
                 type="text"
                 id="CHOSEN_PHASES"
@@ -44,7 +44,7 @@
                 onblur="restoreDefault(this)"
             ><br><br>
 
-            <label for="CHOSEN_COND_IDS">Target Condition ID(s):</label>
+            <label for="CHOSEN_COND_IDS">Target condition ID(s):</label>
             <input
                 type="text"
                 id="CHOSEN_COND_IDS"
@@ -54,7 +54,7 @@
                 onblur="restoreDefault(this)"
             ><br><br>
 
-            <label for="CHOSEN_ITRV_IDS">Target Intervention ID(s):</label>
+            <label for="CHOSEN_ITRV_IDS">Target intervention ID(s):</label>
             <input
                 type="text"
                 id="CHOSEN_ITRV_IDS"
@@ -112,8 +112,8 @@
             logContainer.classList.remove('hidden');
             visualizationContainer.classList.add('hidden');
             visualizationFrame.hidden = true;
-            logOutput.textContent = ""; // Clear previous logs
-        
+            logOutput.textContent = ""; // clear previous logs
+
             // Update button text and show spinner
             visualizeButton.classList.add('loading');
             visualizeButton.querySelector('.button-text').textContent = 'Generating (can take a few minutes)';
@@ -197,55 +197,55 @@
 
         document.getElementById('visualizationFrame').addEventListener('load', function () {
             const iframe = this;
-        
+
             // Function to scale the content inside the iframe
             function scaleIframeContent() {
                 const iframeContent = iframe.contentDocument || iframe.contentWindow.document;
                 const contentBody = iframeContent.body;
-        
-                if (!contentBody) return; // Ensure the content is loaded
-        
+
+                if (!contentBody) return; // ensure the content is loaded
+
                 // Ensure the iframe content does not overflow
                 iframeContent.documentElement.style.overflow = 'hidden';
                 contentBody.style.overflow = 'hidden';
-        
+
                 // Set consistent margin and padding for the content
                 contentBody.style.margin = '0';
                 contentBody.style.padding = '0';
-        
+
                 // Calculate the content width excluding the margins
                 const contentWidth = contentBody.scrollWidth;
-        
+
                 // Calculate the scaling factor to fit the content within the iframe width
                 const scaleFactor = iframe.clientWidth / contentWidth;
-        
+
                 // Apply the scaling transformation to the content
                 contentBody.style.transform = `scale(${scaleFactor})`;
                 contentBody.style.transformOrigin = 'center';
-        
+
                 // Calculate scaled height dynamically
                 const scaledHeight = contentBody.scrollHeight * scaleFactor;
-        
+
                 // Adjust the iframe height to fit the scaled content precisely
                 iframe.style.height = `${Math.ceil(scaledHeight)}px`;
-        
+
                 // Set the iframe's overflow to hidden to prevent scrollbars
                 iframe.style.overflow = 'hidden';
             }
-        
+
             // Scale content when the iframe loads
             scaleIframeContent();
         });
         
         function clearDefault(element) {
             if (element.value === element.defaultValue) {
-                element.value = ""; // Clear the field when focused if it matches the default value
+                element.value = ""; // clear the field when focused if it matches the default value
             }
         }
-    
+        
         function restoreDefault(element) {
             if (element.value.trim() === "") {
-                element.value = element.defaultValue; // Restore the default value if the field is empty
+                element.value = element.defaultValue; // restore the default value if the field is empty
             }
         }
     </script>
