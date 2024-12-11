@@ -181,6 +181,8 @@ def create_visualization_from_ct_info(
         "N_OPTUNA_TRIALS": 25,
         "USER_ID": user_id,
         "PROJECT_ID": project_id,
+        # "LOAD_EMBEDDINGS": True,  # FOR DEBUG
+        # "LOAD_BERTOPIC_RESULTS": True,  # FOR DEBUG
         # "CLUSTER_REPRESENTATION_MODEL": "gpt",
         "SELECT_USER_ID_AND_PROJECT_ID_AUTOMATICALLY": False,
     }

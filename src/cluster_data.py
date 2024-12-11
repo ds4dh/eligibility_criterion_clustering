@@ -75,7 +75,7 @@ def cluster_data_fn(
         processed_dir=cfg["PROCESSED_DIR"],
         hierarchical_ec_scraping=hierarchical_ec_scraping,
     )
-        
+    
     # Generate cluster representation with BERTopic
     if not cfg["LOAD_BERTOPIC_RESULTS"]:
         topic_model = train_bertopic_model(raw_txts, embeddings)

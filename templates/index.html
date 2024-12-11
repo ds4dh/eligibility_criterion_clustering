@@ -16,7 +16,7 @@
             <option value="ct_info">CT info</option>
         </select><br><br>
 
-        <div id="nctInput">
+        <div id="nctInput" class="input-section">
             <label for="TARGET_NCT_ID">Target NCT ID:</label>
             <input
                 type="text"
@@ -28,12 +28,12 @@
             ><br><br>
         </div>
 
-        <div id="fileInput" style="display: none;">
+        <div id="fileInput" class="input-section hidden">
             <label for="TARGET_CT_FILE">Upload Target CT File (JSON format):</label>
             <input type="file" id="TARGET_CT_FILE" name="TARGET_CT_FILE" accept=".json"><br><br>
         </div>
 
-        <div id="ctInfoInput" style="display: none;">
+        <div id="ctInfoInput" class="input-section hidden">
             <label for="CHOSEN_PHASES">Target Phases:</label>
             <input
                 type="text"
@@ -71,18 +71,17 @@
         </button>
     </form>
 
-    <div id="logContainer" style="display: none; margin-top: 20px;">
+    <div id="logContainer" class="section hidden">
         <h2>Generating Visualization...</h2>
-        <p id="logOutput" style="font-family: monospace; white-space: pre-wrap;"></p>
+        <p id="logOutput"></p>
     </div>
 
-    <div id="visualizationContainer" style="display: none; margin-top: 20px;">
+    <div id="visualizationContainer" class="section hidden">
         <h2>Visualization</h2>
         <iframe
             id="visualizationFrame"
-            style="width: 100%; height: 800px; border: 1px solid #ccc;"
-            hidden>
-        </iframe>
+            hidden
+        ></iframe>
     </div>
 
     <script>
@@ -93,9 +92,9 @@
 
         demoModeSelect.addEventListener('change', () => {
             const selectedMode = demoModeSelect.value;
-            nctInput.style.display = selectedMode === 'nct_id' ? 'block' : 'none';
-            fileInput.style.display = selectedMode === 'ct_file' ? 'block' : 'none';
-            ctInfoInput.style.display = selectedMode === 'ct_info' ? 'block' : 'none';
+            nctInput.classList.toggle('hidden', selectedMode !== 'nct_id');
+            fileInput.classList.toggle('hidden', selectedMode !== 'ct_file');
+            ctInfoInput.classList.toggle('hidden', selectedMode !== 'ct_info');
         });
 
         document.getElementById('visualizationForm').addEventListener('submit', async (event) => {
@@ -109,10 +108,10 @@
             const visualizationContainer = document.getElementById('visualizationContainer');
             const visualizationFrame = document.getElementById('visualizationFrame');
             
-            // Hide both containers initially
-            logContainer.style.display = "block"; // Show the log container
-            visualizationContainer.style.display = "none"; // Hide the visualization container
-            visualizationFrame.hidden = true; // Hide the iframe
+            // Show log container, hide visualization
+            logContainer.classList.remove('hidden');
+            visualizationContainer.classList.add('hidden');
+            visualizationFrame.hidden = true;
             logOutput.textContent = ""; // Clear previous logs
         
             // Update button text and show spinner
@@ -121,14 +120,14 @@
             
             const requestData = {};
             if (demoMode === 'ct_file') {
-                const fileInput = document.getElementById('TARGET_CT_FILE');
-                if (fileInput.files.length === 0) {
+                const fileInputElem = document.getElementById('TARGET_CT_FILE');
+                if (fileInputElem.files.length === 0) {
                     alert('Please upload a file.');
                     resetButton();
                     return;
                 }
                 
-                const file = fileInput.files[0];
+                const file = fileInputElem.files[0];
                 const fileContents = await file.text();
                 try {
                     requestData.TARGET_CT_DICT = JSON.parse(fileContents);
@@ -171,15 +170,17 @@
                     
                     visualizationFrame.src = htmlPath; // Load the visualization file
                     visualizationFrame.hidden = false; // Show the iframe
-                    visualizationContainer.style.display = "block"; // Show the visualization container
-                    logContainer.style.display = "none"; // Hide the log container
+                    visualizationContainer.classList.remove('hidden'); // Show the visualization container
+                    logContainer.classList.add('hidden'); // Hide the log container
                 } else {
                     const errorText = await response.json();
                     alert('Error: ' + errorText.error);
+                    location.reload(); // Reload the page
                 }
             } catch (error) {
                 console.error('Error:', error);
                 alert('An error occurred while processing your request.');
+                location.reload(); // Reload the page
             } finally {
                 // Stop polling for logs
                 clearInterval(pollingInterval);
@@ -194,6 +195,48 @@
             }
         });
 
+        document.getElementById('visualizationFrame').addEventListener('load', function () {
+            const iframe = this;
+        
+            // Function to scale the content inside the iframe
+            function scaleIframeContent() {
+                const iframeContent = iframe.contentDocument || iframe.contentWindow.document;
+                const contentBody = iframeContent.body;
+        
+                if (!contentBody) return; // Ensure the content is loaded
+        
+                // Ensure the iframe content does not overflow
+                iframeContent.documentElement.style.overflow = 'hidden';
+                contentBody.style.overflow = 'hidden';
+        
+                // Set consistent margin and padding for the content
+                contentBody.style.margin = '0';
+                contentBody.style.padding = '0';
+        
+                // Calculate the content width excluding the margins
+                const contentWidth = contentBody.scrollWidth;
+        
+                // Calculate the scaling factor to fit the content within the iframe width
+                const scaleFactor = iframe.clientWidth / contentWidth;
+        
+                // Apply the scaling transformation to the content
+                contentBody.style.transform = `scale(${scaleFactor})`;
+                contentBody.style.transformOrigin = 'center';
+        
+                // Calculate scaled height dynamically
+                const scaledHeight = contentBody.scrollHeight * scaleFactor;
+        
+                // Adjust the iframe height to fit the scaled content precisely
+                iframe.style.height = `${Math.ceil(scaledHeight)}px`;
+        
+                // Set the iframe's overflow to hidden to prevent scrollbars
+                iframe.style.overflow = 'hidden';
+            }
+        
+            // Scale content when the iframe loads
+            scaleIframeContent();
+        });
+        
         function clearDefault(element) {
             if (element.value === element.defaultValue) {
                 element.value = ""; // Clear the field when focused if it matches the default value

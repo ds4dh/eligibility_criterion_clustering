@@ -767,9 +767,10 @@ class ClusterOutput:
             # Polish figure
             legend_font_size = max(1, font_size * 20 / legend_line_count)
             legend_font_size = min(font_size, legend_font_size)  # not bigger
-            width, height = (720, 720)
+            width = 500
+            height = width / 1.25
             if do_top_k:
-                added_width = 720 / 70 * min(70, max([len(l) for l in labels]))
+                added_width = width / 70 * min(70, max([len(l) for l in labels]))
                 added_width *= legend_font_size / font_size
                 width += added_width
                 marker_dict = dict(line=dict(color="black", width=1.0))
@@ -777,18 +778,19 @@ class ClusterOutput:
                 marker_dict = dict(opacity=0.5, line=dict(color="gray", width=0.5))
             fig.update_traces(marker=marker_dict)
             fig.update_xaxes(
-                title_text="tSNE-1", linecolor="black", linewidth=0.5,
-                title_font=dict(size=font_size, family="TeX Gyre Pagella"),
-                tickfont=dict(size=font_size, family="TeX Gyre Pagella")
+                # title_text="tSNE-1", linecolor="black", linewidth=0.5,
+                # title_font=dict(size=font_size, family="TeX Gyre Pagella"),
+                # tickfont=dict(size=font_size, family="TeX Gyre Pagella"),
+                visible=False,
             )
             fig.update_yaxes(
-                title_text="tSNE-2", linecolor="black", linewidth=0.5,
-                title_font=dict(size=font_size, family="TeX Gyre Pagella"),
-                tickfont=dict(size=font_size, family="TeX Gyre Pagella")
+                # title_text="tSNE-2", linecolor="black", linewidth=0.5,
+                # title_font=dict(size=font_size, family="TeX Gyre Pagella"),
+                # tickfont=dict(size=font_size, family="TeX Gyre Pagella"),
+                visible=False,
             )
             fig.update_layout(
-                width=width, height=height, plot_bgcolor="white",
-                margin=dict(l=20, r=width * 0.45, t=20, b=20),
+                plot_bgcolor="white", width=width, height=height,
                 legend=dict(
                     yanchor="middle", y=0.5, xanchor="left",
                     title_text="", itemsizing="constant",
@@ -800,7 +802,7 @@ class ClusterOutput:
                     trace.name = trace.name.replace(', 0', '').replace(', 1', '')
             else:
                 fig.update_layout(
-                    margin=dict(l=20, r=20, t=20, b=20),
+                    margin=dict(l=0, r=0, t=0, b=0),
                     showlegend=False,
                 )
             ms_factor = 1.0

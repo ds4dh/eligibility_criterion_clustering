@@ -1,3 +1,7 @@
+:root {
+    --max-width: 500px;
+}
+
 html, body {
     font-family: "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     margin: 10px;
@@ -6,42 +10,77 @@ html, body {
 
 h1 {
     color: #333;
+    font-size: 36px;
+    margin-bottom: 25px;
 }
 
 form {
-    max-width: 500px;
+    max-width: var(--max-width);
 }
+
+iframe {
+    width: 100%;
+    max-width: var(--max-width);
+    border: 1px solid #5e5e5e;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.hidden {
+    display: none;
+}
+
+.input-section {
+    margin-bottom: 10px;
+}
+
+#logOutput {
+    font-family: monospace;
+    white-space: pre-wrap;
+    background: #f9f9f9;
+    border: 1px solid #ddd;
+    padding: 10px;
+    border-radius: 4px;
+    width: 100%;
+    max-width: var(--max-width);
+    box-sizing: border-box;
+}
+
 
 label {
     display: block;
-    margin-bottom: 5px;
-    font-size: 16px;
+    margin-bottom: 10px;
+    font-size: 18px;
+    font-weight: normal;
 }
 
 input, select, button {
-    box-sizing: border-box; /* Ensures padding and borders are included in width */
-    width: 100%; /* Ensures all elements have the same width */
-    max-width: 100%; /* Prevents overflow */
-    padding: 8px; /* Consistent padding */
-    margin-bottom: 15px;
+    box-sizing: border-box;
+    width: 100%;
+    padding: 8px;
+    /* margin-bottom: 0px; */
     border: 1px solid #ccc;
     border-radius: 4px;
     font-size: 16px;
 }
 
+input:focus, select:focus, button:focus {
+    outline: 2px solid #007BFF;
+    border-color: #007BFF;
+}
+
 button {
     background-color: #007BFF;
     color: white;
+    font-weight: normal;
     border: none;
     cursor: pointer;
-    position: relative; /* Allows positioning spinner inside the button */
-    display: inline-flex; /* Align text and spinner inline */
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-size: 16px; /* Consistent font size for text */
-    padding: 10px 20px; /* Add consistent padding */
-    height: 40px;
-    width: 100%;
+    font-size: 18px;
+    padding: 10px 20px;
+    height: 50px;
 }
 
 button:hover {
@@ -49,9 +88,9 @@ button:hover {
 }
 
 button .spinner {
-    display: none; /* Initially hidden */
-    border: 3px solid #f3f3f3; /* Light grey */
-    border-top: 3px solid white; /* White spinner */
+    display: none;
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid white;
     border-radius: 50%;
     width: 20px;
     height: 20px;
@@ -59,12 +98,12 @@ button .spinner {
 }
 
 button.loading .spinner {
-    display: inline-block; /* Show spinner when button is loading */
-    margin-left: 10px; /* Add space between spinner and text */
+    display: inline-block;
+    margin-left: 10px;
 }
 
 button.loading .button-text {
-    visibility: visible; /* Keep text visible */
+    visibility: visible;
 }
 
 @keyframes spin {
