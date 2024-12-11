@@ -168,19 +168,19 @@
                     const result = await response.json();
                     const htmlPath = result.html_path;
                     
-                    visualizationFrame.src = htmlPath; // Load the visualization file
-                    visualizationFrame.hidden = false; // Show the iframe
-                    visualizationContainer.classList.remove('hidden'); // Show the visualization container
-                    logContainer.classList.add('hidden'); // Hide the log container
+                    visualizationFrame.src = htmlPath; // load the visualization file
+                    visualizationFrame.hidden = false; // show the iframe
+                    visualizationContainer.classList.remove('hidden'); // show the visualization container
+                    logContainer.classList.add('hidden'); // hide the log container
                 } else {
                     const errorText = await response.json();
                     alert('Error: ' + errorText.error);
-                    location.reload(); // Reload the page
+                    location.reload(); // reload the page
                 }
             } catch (error) {
                 console.error('Error:', error);
                 alert('An error occurred while processing your request.');
-                location.reload(); // Reload the page
+                location.reload(); // reload the page
             } finally {
                 // Stop polling for logs
                 clearInterval(pollingInterval);

@@ -862,12 +862,17 @@ def get_embeddings(
             output_dir=processed_dir,
             embed_model_id=embed_model_id,
         )
+        
     else:
         if not hierarchical_ec_scraping:
-            embeddings, raw_txts, metadatas = generate_embeddings(
-                input_dir=preprocessed_dir,
-                embed_model_id=embed_model_id,
-            )
+            embed_fn = generate_embeddings
+        else:
+            embed_fn = generate_embeddings_hierarchically
+        embeddings, raw_txts, metadatas = embed_fn(
+            input_dir=preprocessed_dir,
+            embed_model_id=embed_model_id,
+        )
+        if not hierarchical_ec_scraping:
             save_embeddings(
                 output_dir=processed_dir,
                 embed_model_id=embed_model_id,
@@ -875,12 +880,7 @@ def get_embeddings(
                 raw_txts=raw_txts,
                 metadatas=metadatas,
             )
-        else:
-            embeddings, raw_txts, metadatas = generate_embeddings_hierarchically(
-                input_dir=preprocessed_dir,
-                embed_model_id=embed_model_id,
-            )
-            
+        
     return embeddings.numpy(), raw_txts, metadatas
 
 

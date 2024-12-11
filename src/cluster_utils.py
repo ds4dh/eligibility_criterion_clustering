@@ -767,7 +767,7 @@ class ClusterOutput:
             # Polish figure
             legend_font_size = max(1, font_size * 20 / legend_line_count)
             legend_font_size = min(font_size, legend_font_size)  # not bigger
-            width = 500
+            width = 375
             height = width / 1.25
             if do_top_k:
                 added_width = width / 70 * min(70, max([len(l) for l in labels]))
@@ -790,7 +790,8 @@ class ClusterOutput:
                 visible=False,
             )
             fig.update_layout(
-                plot_bgcolor="white", width=width, height=height,
+                plot_bgcolor="white", dragmode="pan",
+                width=width, height=height,
                 legend=dict(
                     yanchor="middle", y=0.5, xanchor="left",
                     title_text="", itemsizing="constant",
