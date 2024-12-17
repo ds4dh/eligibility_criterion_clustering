@@ -1,21 +1,17 @@
 import os
 import shutil
-try:
-    import config
-except:
-    from . import config
-logger = config.CTxAILogger("INFO")
 import torchdata.datapipes.iter as dpi
 from typing import Any
+from flask import g
 try:
-    from config import update_config
+    from config_utils import update_config
     from cluster_data import cluster_data_fn
     from generate_utils import extract_ids_at_lvl
     from parse_utils import (
         ClinicalTrialFilter, CustomJsonParser, CustomNCTIdParser, CustomCTDictNamer,
     )
 except:
-    from .config import update_config
+    from .config_utils import update_config
     from .cluster_data import cluster_data_fn
     from .generate_utils import extract_ids_at_lvl
     from .parse_utils import (
@@ -98,14 +94,14 @@ def create_visualizations_from_ct_paths_or_nct_ids(
             visualization_output = create_visualization(ct_data, cond_type_filter_set)
         except RuntimeError as visualization_error:
             if manuscript_mode:
-                logger.info("This clinical trial was not eligible, skipping")
+                g.logger.info("This clinical trial was not eligible, skipping")
                 continue
             else:
                 raise(visualization_error)
         visualization_outputs.append(visualization_output)
         
         # Check if enough examples were generated
-        logger.info(f"Generated visualization at {visualization_output['html']}")
+        g.logger.info(f"Generated visualization at {visualization_output['html']}")
         n_generated_examples += 1
         if n_generated_examples >= n_examples_to_generate:
             break
@@ -159,17 +155,15 @@ def create_visualization_from_ct_info(
     cond_ids: list[str],
     itrv_ids: list[str],
     ct_path: str|None=None,
-    cond_type_filter_set: list[str]=[],
 ) -> dict[str, str]|None:
     """ Generate a cluster visualization from a set of phases, conditions, and
         interventions, then return the path to the HTML visualization files
     """
-    # Identify where data will be written
-    user_id = "-".join(["examples_with_CT"] + cond_type_filter_set)
-    project_id = ct_path.split("/")[-1].replace(".json", "")
-    
     # Update configuration with CT phase(s), condition(s), and intervention(s)
+    project_id = ct_path.split("/")[-1].replace(".json", "")
     to_update = {
+        "PROJECT_ID": project_id,
+        "SELECT_USER_ID_AND_PROJECT_ID_AUTOMATICALLY": False,  # should already be the case
         "CHOSEN_PHASES": ct_phases,
         "CHOSEN_COND_IDS": cond_ids,
         "CHOSEN_ITRV_IDS": itrv_ids,
@@ -179,16 +173,13 @@ def create_visualization_from_ct_info(
         "MAX_EC_SAMPLES": 50_000,
         "MIN_EC_SAMPLES": 2_500,
         "N_OPTUNA_TRIALS": 25,
-        "USER_ID": user_id,
-        "PROJECT_ID": project_id,
         # "LOAD_EMBEDDINGS": True,  # FOR DEBUG
         # "LOAD_BERTOPIC_RESULTS": True,  # FOR DEBUG
         # "CLUSTER_REPRESENTATION_MODEL": "gpt",
-        "SELECT_USER_ID_AND_PROJECT_ID_AUTOMATICALLY": False,
     }
     if ct_path is not None:
         to_update.update({"ADDITIONAL_NEGATIVE_FILTER": {"ct path": ct_path}})        
-    update_config(request_data=to_update)  # /!\ this updates "cfg" object /!\
+    g.cfg = update_config(g.cfg, request_data=to_update)  # thread-safe global update
     
     # Cluster eligibility criteria similar to the current CT (using filters)
     try:
@@ -200,7 +191,7 @@ def create_visualization_from_ct_info(
     
     # Clustering may fail if there are not enough similiar criteria
     except RuntimeError as cluster_algorithm_error:
-        shutil.rmtree(os.path.join(DATA_DIR, user_id, project_id))
+        shutil.rmtree(g.cfg["USER_DIR"])  # or os.path.join(g.cfg["USER_DIR"], project_id)?
         raise(cluster_algorithm_error)
     
     # Write information about this cluster run to a log file

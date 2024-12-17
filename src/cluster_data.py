@@ -1,16 +1,10 @@
-# Config
-import os
-try:
-    import config
-except:
-    from . import config
-logger = config.CTxAILogger("INFO")
-os.environ["TOKENIZERS_PARALLELISM"] = "false"
-
 # Utils
+import os
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 import pandas as pd
 import matplotlib.pyplot as plt
 import torch
+from flask import g
 try:
     from cluster_utils import ClusterGeneration, ClusterOutput, get_dim_red_model, set_seeds
     from parse_utils import get_embeddings
@@ -30,23 +24,20 @@ def run_experiment_1():
     """ If ran as a script, call cluster_data for several models and write
         a summary of results to the output directory
     """
-    # Load current configuration
-    cfg = config.get_config()
-    
     # Generate results using one model, then save the results
     cluster_metrics = {}
-    for embed_model_id in cfg["EMBEDDING_MODEL_ID_MAP"].keys():
-        logger.info("Starting with %s" % embed_model_id)
+    for embed_model_id in g.cfg["EMBEDDING_MODEL_ID_MAP"].keys():
+        g.logger.info("Starting with %s" % embed_model_id)
         cluster_output = cluster_data_fn(embed_model_id=embed_model_id)
         cluster_metrics[embed_model_id] = cluster_output.cluster_metrics
-        logger.info("Done with %s" % embed_model_id)
+        g.logger.info("Done with %s" % embed_model_id)
     
     # Plot final results (comparison of different model embeddings)
-    output_path = os.path.join(cfg["RESULT_DIR"], "model-comparison.png")
-    if cfg["DO_EVALUATE_CLUSTERING"]:
-        fig_title = "Label-dependent metrics %s" % cfg["CHOSEN_COND_IDS"]
+    output_path = os.path.join(g.cfg["RESULT_DIR"], "model-comparison.png")
+    if g.cfg["DO_EVALUATE_CLUSTERING"]:
+        fig_title = "Label-dependent metrics %s" % g.cfg["CHOSEN_COND_IDS"]
         plot_model_comparison(cluster_metrics, output_path, fig_title)
-    logger.info("Model comparison finished!")
+    g.logger.info("Model comparison finished!")
 
 
 def cluster_data_fn(
@@ -57,50 +48,50 @@ def cluster_data_fn(
     """ Cluster eligibility criteria using embeddings from one language model
     """
     # Initialization
-    cfg = config.get_config()
     if write_results:
-        os.makedirs(cfg["PROCESSED_DIR"], exist_ok=True)
-        os.makedirs(cfg["RESULT_DIR"], exist_ok=True)
-    set_seeds(cfg["RANDOM_STATE"])  # try to ensure reproducibility
+        os.makedirs(g.cfg["PROCESSED_DIR"], exist_ok=True)
+        os.makedirs(g.cfg["RESULT_DIR"], exist_ok=True)
+    set_seeds(g.cfg["RANDOM_STATE"])  # try to ensure reproducibility
     bertopic_ckpt_path = os.path.join(
-        cfg["PROCESSED_DIR"],
+        g.cfg["PROCESSED_DIR"],
         "bertopic_model_%s" % embed_model_id,
     )
     
     # Generate or load elibibility criterion texts, embeddings, and metadatas
-    logger.info("Getting elibility criteria embeddings from %s" % embed_model_id)
+    g.logger.info("Getting elibility criteria embeddings from %s" % embed_model_id)
     embeddings, raw_txts, metadatas = get_embeddings(
         embed_model_id=embed_model_id,
-        preprocessed_dir=cfg["PREPROCESSED_DIR"],
-        processed_dir=cfg["PROCESSED_DIR"],
+        preprocessed_dir=g.cfg["PREPROCESSED_DIR"],
+        processed_dir=g.cfg["PROCESSED_DIR"],
         hierarchical_ec_scraping=hierarchical_ec_scraping,
     )
     
     # Generate cluster representation with BERTopic
-    if not cfg["LOAD_BERTOPIC_RESULTS"]:
+    if not g.cfg["LOAD_BERTOPIC_RESULTS"]:
         topic_model = train_bertopic_model(raw_txts, embeddings)
-        if cfg["ENVIRONMENT"] == "ctgov"\
-        and cfg["CLUSTER_REPRESENTATION_MODEL"] is None\
+        if g.cfg["ENVIRONMENT"] == "ctgov"\
+        and g.cfg["CLUSTER_REPRESENTATION_MODEL"] is None\
         and write_results:
             topic_model.save(bertopic_ckpt_path)
     
     # Load BERTopic cluster representation from previous run (only for ctgov)
     else:
-        logger.info("Loading clustering model trained on eligibility criteria embeddings")
+        g.logger.info("Loading clustering model trained on eligibility criteria embeddings")
+        print(bertopic_ckpt_path)
         topic_model = BERTopic.load(bertopic_ckpt_path)
-        if cfg["REGENERATE_REPRESENTATIONS_AFTER_LOADING_BERTOPIC_RESULTS"]:
+        if g.cfg["REGENERATE_REPRESENTATIONS_AFTER_LOADING_BERTOPIC_RESULTS"]:
             topic_model.update_topics(
                 docs=raw_txts,
                 representation_model=get_representation_model(),
             )
     
     # Generate results from the trained model and predictions
-    logger.info("Writing clustering results with bertopic titles")
+    g.logger.info(f"Writing clustering results to {g.cfg['RESULT_DIR']}")
     return ClusterOutput(
-        input_data_path=cfg["FULL_DATA_PATH"],
-        output_base_dir=cfg["RESULT_DIR"],
-        user_id=cfg["USER_ID"],
-        project_id=cfg["PROJECT_ID"],
+        input_data_path=g.cfg["FULL_DATA_PATH"],
+        output_base_dir=g.cfg["RESULT_DIR"],
+        user_id=g.cfg["USER_ID"],
+        project_id=g.cfg["PROJECT_ID"],
         embed_model_id=embed_model_id,
         topic_model=topic_model,
         raw_txts=raw_txts,
@@ -116,12 +107,11 @@ def train_bertopic_model(
     """ Train a BERTopic model
     """
     # Create BERTopic model
-    cfg = config.get_config()
     topic_model = BERTopic(
-        top_n_words=cfg["CLUSTER_REPRESENTATION_TOP_N_WORDS_PER_TOPIC"],
+        top_n_words=g.cfg["CLUSTER_REPRESENTATION_TOP_N_WORDS_PER_TOPIC"],
         umap_model=get_dim_red_model(
-            cfg["CLUSTER_DIM_RED_ALGO"],
-            cfg["CLUSTER_RED_DIM"],
+            g.cfg["CLUSTER_DIM_RED_ALGO"],
+            g.cfg["CLUSTER_RED_DIM"],
             len(embeddings),
         ),
         hdbscan_model=ClusterGeneration(),
@@ -132,7 +122,7 @@ def train_bertopic_model(
     )
     
     # Train BERTopic model using raw text documents and pre-computed embeddings
-    logger.info(f"Running BERTopic-like pipeline on {len(raw_txts)} embeddings")
+    g.logger.info(f"Running BERTopic-like pipeline on {len(raw_txts)} embeddings")
     topic_model = topic_model.fit(raw_txts, embeddings)
     # topics = topic_model.reduce_outliers(raw_txts, topics)
     return topic_model
@@ -141,12 +131,9 @@ def train_bertopic_model(
 def get_representation_model():
     """ Get a model to represent each cluster-topic with a title
     """
-    # Get current configuration
-    cfg = config.get_config()
-    
     # Prompt chat-gpt with keywords and document content
-    if cfg["CLUSTER_REPRESENTATION_MODEL"] == "gpt":
-        api_path = os.path.join(cfg["CLUSTER_REPRESENTATION_PATH_TO_OPENAI_API_KEY"])
+    if g.cfg["CLUSTER_REPRESENTATION_MODEL"] == "gpt":
+        api_path = os.path.join(g.cfg["CLUSTER_REPRESENTATION_PATH_TO_OPENAI_API_KEY"])
         try:
             with open(api_path, "r") as f: api_key = f.read()
         except:
@@ -159,9 +146,9 @@ def get_representation_model():
                 client=OpenAIClient(api_key=api_key),
                 model="gpt-3.5-turbo",
                 exponential_backoff=True, chat=True,
-                prompt=cfg["CLUSTER_REPRESENTATION_GPT_PROMPT"],
+                prompt=g.cfg["CLUSTER_REPRESENTATION_GPT_PROMPT"],
                 generator_kwargs={
-                    "seed": cfg["RANDOM_STATE"],
+                    "seed": g.cfg["RANDOM_STATE"],
                     "temperature": 0,
                 },
             )

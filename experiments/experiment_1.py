@@ -6,9 +6,9 @@ import time
 import json
 import signal
 import subprocess
-from src import config
-config.load_default_config()
-logger = config.CTxAILogger("INFO")
+from src import config_utils
+config_utils.load_default_config()
+logger = config_utils.CTxAILogger("INFO")
 
 
 def run_wsgi_server():

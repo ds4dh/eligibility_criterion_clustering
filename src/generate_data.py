@@ -2,11 +2,7 @@ import os
 import csv
 import json
 import argparse
-try:
-    import config
-except:
-    from . import config
-logger = config.CTxAILogger("INFO")
+from flask import g
 try:
     from parse_data import CustomJsonParser
     from parse_utils import ClinicalTrialFilter
@@ -81,10 +77,8 @@ def main():
     """ Compare clustering to llm methods for generating eligibility criteria
         section in clinical trials
     """
-    # Load evaluation dataset
-    cfg = config.get_config()
     ct_data, ec_references = get_evaluated_ct_dataset(
-        data_path=cfg["FULL_DATA_PATH"],
+        data_path=g.cfg["FULL_DATA_PATH"],
         cond_type_filters=[EVALUATION_COND_TYPE_FILTER],
     )
     
@@ -101,7 +95,7 @@ def main():
             ct_data=ct_sample,
             cond_filter_lvl=COND_FILTER_LVL,
             itrv_filter_lvl=ITRV_FILTER_LVL,            
-        )  # /!\ this updates "cfg" /!\
+        )  # updating thread-safe global config
         try:
             cluster_output = cluster_data_fn(
                 embed_model_id=EMBED_MODEL_ID,
@@ -111,7 +105,7 @@ def main():
             cluster_quality = cluster_output.cluster_metrics["label_free"]["Silhouette score"]
             cluster_ec_section = generate_cluster_ec_section(cluster_output)
         except Exception as e:
-            logger.info("Clustering method failed (%s)" % str(e))
+            g.logger.info("Clustering method failed (%s)" % str(e))
             continue
         
         # LLM method for ec-section generation
@@ -129,7 +123,7 @@ def main():
     
     # Add random performance columns after all result rows were written
     _, ec_references_random = get_evaluated_ct_dataset(
-        data_path=cfg["FULL_DATA_PATH"],
+        data_path=g.cfg["FULL_DATA_PATH"],
         cond_type_filters=[],  # i.e., no filter (to select a random CT)
         random_mode=True,
     )
@@ -314,7 +308,7 @@ def generate_llm_ec_section(ct_path: str) -> str:
     user_prompt = LLM_USER_PROMPT.replace("[CT_DATA_TEXT]", str(ct_raw_dict))
     
     # Prompt gpt-3.5-turbo
-    logger.info("Generating ec section using LLM method")
+    g.logger.info("Generating ec section using LLM method")
     return generate_llm_response(
         user_prompt=user_prompt,
         system_prompt=LLM_SYSTEM_PROMPT,
@@ -331,7 +325,7 @@ def generate_cluster_ec_section(cluster_output: ClusterOutput) -> str:
     Returns:
         str: generated eligibility criteria section
     """
-    logger.info("Generating ec section using cluster method")
+    g.logger.info("Generating ec section using cluster method")
     clusters = [c for c in cluster_output.cluster_instances if c.cluster_id != -1]
     clusters.sort(key=lambda cluster: cluster.prevalence, reverse=True)
     selected_ec_texts = [c.ec_list[0].raw_text for c in clusters]
@@ -384,7 +378,7 @@ def get_evaluated_ct_dataset(
         ]
     """
     random_str = " (random references only)" if random_mode else ""
-    logger.info("Building ec-generation dataset" + random_str)
+    g.logger.info("Building ec-generation dataset" + random_str)
     files = dpi.FileLister(data_path, recursive=True, masks="*.json")
     shuffled_files = dpi.Shuffler(files)
     json_streams = dpi.FileOpener(shuffled_files, encoding="utf-8")

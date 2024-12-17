@@ -1,14 +1,10 @@
-# Config
-import os
-try:
-    import config
-    from cluster_utils import redirect_tqdm_to_logger
-except:
-    from . import config
-    from .cluster_utils import redirect_tqdm_to_logger
-logger = config.CTxAILogger("INFO")
-
 # Utils
+import os
+from flask import g
+try:
+    from src.config_utils import CustomTqdm, update_config
+except:
+    from .config_utils import CustomTqdm, update_config
 import re
 import ast
 import json
@@ -17,7 +13,6 @@ import pickle
 import numpy as np
 import pandas as pd
 import torch
-from tqdm import tqdm
 from typing import Iterator
 
 # Data pipelines
@@ -78,8 +73,7 @@ class ClinicalTrialFilter(IterDataPipe):
         super().__init__()
         self.dp = dp
         self.for_inference = for_inference
-        cfg = config.get_config()
-        with open(cfg["MESH_CROSSWALK_PATH"], "r") as f:
+        with open(g.cfg["MESH_CROSSWALK_PATH"], "r") as f:
             self.mesh_cw = json.load(f)
             
     def __iter__(self):
@@ -242,7 +236,7 @@ class CriteriaParser(IterDataPipe):
     """
     def __init__(self, dp):
         super().__init__()
-        logger.info("Loading package punkt to tokenize sentences")
+        g.logger.info("Loading package punkt to tokenize sentences")
         nltk.download("punkt", quiet=True)
         self.dp = dp
     
@@ -480,8 +474,7 @@ class CustomXLSXLineReader(IterDataPipe):
             "conditions": "condition_ids",
             "interventions": "intervention_ids",
         }
-        cfg = config.get_config()
-        with open(cfg["MESH_CROSSWALK_PATH"], "r") as f:
+        with open(g.cfg["MESH_CROSSWALK_PATH"], "r") as f:
             self.mesh_cw = json.load(f)
         self.intervention_remove = [
             "Drug: ", "Biological: ", "Radiation: ",
@@ -607,21 +600,18 @@ class EligibilityCriteriaFilter(IterDataPipe):
             eligibility criteria and to filter out samples whose clinical trial
             does not include a set of statuses/phases/conditions/interventions
         """
-        # Get current configuration
-        cfg = config.get_config()
-        
         # Initialize filters
-        self.chosen_phases = cfg["CHOSEN_PHASES"]
-        self.chosen_statuses = cfg["CHOSEN_STATUSES"]
-        self.chosen_criteria = cfg["CHOSEN_CRITERIA"]
-        self.chosen_cond_ids = cfg["CHOSEN_COND_IDS"]
-        self.chosen_itrv_ids = cfg["CHOSEN_ITRV_IDS"]
-        self.chosen_cond_lvl = cfg["CHOSEN_COND_LVL"]
-        self.chosen_itrv_lvl = cfg["CHOSEN_ITRV_LVL"]
-        self.additional_negative_filter: dict = cfg["ADDITIONAL_NEGATIVE_FILTER"]
+        self.chosen_phases = g.cfg["CHOSEN_PHASES"]
+        self.chosen_statuses = g.cfg["CHOSEN_STATUSES"]
+        self.chosen_criteria = g.cfg["CHOSEN_CRITERIA"]
+        self.chosen_cond_ids = g.cfg["CHOSEN_COND_IDS"]
+        self.chosen_itrv_ids = g.cfg["CHOSEN_ITRV_IDS"]
+        self.chosen_cond_lvl = g.cfg["CHOSEN_COND_LVL"]
+        self.chosen_itrv_lvl = g.cfg["CHOSEN_ITRV_LVL"]
+        self.additional_negative_filter: dict = g.cfg["ADDITIONAL_NEGATIVE_FILTER"]
         
         # Load crosswalk between mesh terms and conditions / interventions
-        with open(cfg["MESH_CROSSWALK_INVERTED_PATH"], "r") as f:
+        with open(g.cfg["MESH_CROSSWALK_INVERTED_PATH"], "r") as f:
             self.mesh_cw_inverted = json.load(f)
         
         # Initialize data pipeline
@@ -799,7 +789,7 @@ class CustomJsonParser(dpi.JsonParser):
                 stream.close()
                 yield file_name, json.loads(data, **self.kwargs)
             except json.decoder.JSONDecodeError:
-                logger.info("Empty json file - skipping to next file.")
+                g.logger.info("Empty json file - skipping to next file.")
                 stream.close()
                 
                 
@@ -841,7 +831,7 @@ class CustomNCTIdParser(IterDataPipe):
                     ct_parsed = json.loads(response.content)
                     yield ct_name, ct_parsed
                 except json.decoder.JSONDecodeError:
-                    logger.info("Empty json file - skipping to next file.")
+                    g.logger.info("Empty json file - skipping to next file.")
             else:
                 raise RuntimeError(f"NCTId {nct_id} not found in CT.gov database")
 
@@ -854,10 +844,7 @@ def get_embeddings(
 ) -> tuple[np.ndarray, list[str], dict]:
     """ Generate and save embeddings or load them from a previous run
     """
-    # Get current configuration
-    cfg = config.get_config()
-    
-    if cfg["LOAD_EMBEDDINGS"]:
+    if g.cfg["LOAD_EMBEDDINGS"]:
         embeddings, raw_txts, metadatas = load_embeddings(
             output_dir=processed_dir,
             embed_model_id=embed_model_id,
@@ -895,9 +882,8 @@ def generate_embeddings_hierarchically(
         are set to the minimum values (i.e., 2 and 1), found ECs are returned.
     """
     # Initialization
-    cfg = config.get_config()
-    base_chosen_cond_lvl = cfg["CHOSEN_COND_LVL"]
-    base_chosen_itrv_lvl = cfg["CHOSEN_ITRV_LVL"]
+    base_chosen_cond_lvl = g.cfg["CHOSEN_COND_LVL"]
+    base_chosen_itrv_lvl = g.cfg["CHOSEN_ITRV_LVL"]
     
     # Try to get enough EC emeddings, raw texts, and metadatas
     embeddings, raw_txts, metadatas = generate_embeddings(
@@ -906,20 +892,20 @@ def generate_embeddings_hierarchically(
     )
     
     # If not enough, incrementally reduce chosen condition and intervention level
-    while len(embeddings) < cfg["MIN_EC_SAMPLES"]:
-        new_chosen_cond_lvl = cfg["CHOSEN_COND_LVL"] - 1
-        new_chosen_itrv_lvl = cfg["CHOSEN_ITRV_LVL"] - 1
+    while len(embeddings) < g.cfg["MIN_EC_SAMPLES"]:
+        new_chosen_cond_lvl = g.cfg["CHOSEN_COND_LVL"] - 1
+        new_chosen_itrv_lvl = g.cfg["CHOSEN_ITRV_LVL"] - 1
         if new_chosen_itrv_lvl == 0:  # itrv = lower one (see docstring)
             raise RuntimeError("Not enough ECs identified!")  # break
         
         # Compute a more leniently matched set of ECs
-        logger.info("Decreasing check level to find more ECs (cond: %i, itrv: %i)" %\
+        g.logger.info("Decreasing check level to find more ECs (cond: %i, itrv: %i)" %\
             (new_chosen_cond_lvl, new_chosen_itrv_lvl))
         to_update = {
             "CHOSEN_COND_LVL": new_chosen_cond_lvl,
             "CHOSEN_ITRV_LVL": new_chosen_itrv_lvl,
         }
-        config.update_config(to_update)
+        g.cfg = update_config(g.cfg, to_update)
         added_embeddings, added_raw_txts, added_metadatas = generate_embeddings(
             input_dir=input_dir,
             embed_model_id=embed_model_id,
@@ -940,12 +926,12 @@ def generate_embeddings_hierarchically(
         "CHOSEN_COND_LVL": base_chosen_cond_lvl,
         "CHOSEN_ITRV_LVL": base_chosen_itrv_lvl,
     }
-    config.update_config(to_update)
+    g.cfg = update_config(g.cfg, to_update)
     
     # Make sure not too many ECs are returned
-    embeddings = embeddings[:cfg["MAX_EC_SAMPLES"]]
-    raw_txts = raw_txts[:cfg["MAX_EC_SAMPLES"]]
-    metadatas = metadatas[:cfg["MAX_EC_SAMPLES"]]
+    embeddings = embeddings[:g.cfg["MAX_EC_SAMPLES"]]
+    raw_txts = raw_txts[:g.cfg["MAX_EC_SAMPLES"]]
+    metadatas = metadatas[:g.cfg["MAX_EC_SAMPLES"]]
     
     return embeddings, raw_txts, metadatas
 
@@ -958,7 +944,6 @@ def generate_embeddings(
         a given model
     """
     # Load model
-    cfg = config.get_config()
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
     model, tokenizer, pooling_fn = get_embedding_model_pipeline(embed_model_id)
     model = model.to(device)
@@ -969,7 +954,7 @@ def generate_embeddings(
         .parse_csv()\
         .sharding_filter()\
         .filter_eligibility_criteria()\
-        .batch(batch_size=cfg["EMBEDDING_BATCH_SIZE"])\
+        .batch(batch_size=g.cfg["EMBEDDING_BATCH_SIZE"])\
         .tokenize(tokenizer=tokenizer)
     rs = InProcessReadingService()
     dl = DataLoader2(ds, reading_service=rs)
@@ -977,29 +962,33 @@ def generate_embeddings(
     # Go through data pipeline
     raw_txts, metadatas = [], []
     embeddings = torch.empty((0, model.config.hidden_size))
-    with redirect_tqdm_to_logger(
-        prefix="[Identifying similar eligibility criteria] ",
-        suffix=f" [Embedding them with {embed_model_id}]",
-    ):
-        with tqdm(desc="- Found 0 eligibility criteria", bar_format="{desc}") as pbar:
-            for idx, (encoded, raw_txt, metadata) in enumerate(dl, start=1):
-                
-                # Compute embeddings for this batch
-                encoded = {k: v.to(device) for k, v in encoded.items()}
-                with torch.no_grad():
-                    outputs = model(**encoded)
-                ec_embeddings = pooling_fn(encoded, outputs)
-                
-                # Record model outputs (tensor), input texts and corresponding labels
-                embeddings = torch.cat((embeddings, ec_embeddings.cpu()), dim=0)
-                raw_txts.extend(raw_txt)
-                metadatas.extend(metadata)
-                if len(raw_txts) > cfg["MAX_EC_SAMPLES"]: break
-                
-                # Update the progress bar description
-                n_ec_found = (idx - 1) * cfg["EMBEDDING_BATCH_SIZE"]
-                pbar.set_description("Found at least %s eligibility criteria" % n_ec_found)
-                pbar.update(1)
+    prefix="[Identifying similar eligibility criteria] "
+    suffix=f" [Embedding them with {embed_model_id}]"
+    with CustomTqdm(
+        desc="Found 0 eligibility criteria",
+        logger=g.logger,
+        prefix=prefix,
+        suffix=suffix,
+        bar_format="{desc}{n_fmt}it [{rate_fmt}]",
+    ) as pbar:
+        for idx, (encoded, raw_txt, metadata) in enumerate(dl, start=1):
+            
+            # Compute embeddings for this batch
+            encoded = {k: v.to(device) for k, v in encoded.items()}
+            with torch.no_grad():
+                outputs = model(**encoded)
+            ec_embeddings = pooling_fn(encoded, outputs)
+            
+            # Record model outputs (tensor), input texts and corresponding labels
+            embeddings = torch.cat((embeddings, ec_embeddings.cpu()), dim=0)
+            raw_txts.extend(raw_txt)
+            metadatas.extend(metadata)
+            if len(raw_txts) > g.cfg["MAX_EC_SAMPLES"]: break
+            
+            # Update the progress bar description
+            n_ec_found = (idx - 1) * g.cfg["EMBEDDING_BATCH_SIZE"]
+            pbar.set_description("Found at least %s eligibility criteria" % n_ec_found)
+            pbar.update(1)
     
     # Make sure gpu memory is made free for report_cluster
     torch.cuda.empty_cache()
@@ -1023,7 +1012,7 @@ def save_embeddings(output_dir, embed_model_id, embeddings, raw_txts, metadatas)
 def load_embeddings(output_dir, embed_model_id):
     """ Simple loading function for model predictions
     """
-    logger.info("Loading embeddings from previous run")
+    g.logger.info("Loading embeddings from previous run")
     ckpt_path = os.path.join(output_dir, "embeddings_%s.pt" % embed_model_id)
     embeddings = torch.load(ckpt_path)
     with open(os.path.join(output_dir, "raw_txts.pkl"), "rb") as f:
@@ -1036,9 +1025,6 @@ def load_embeddings(output_dir, embed_model_id):
 def get_embedding_model_pipeline(embed_model_id: str):
     """ Select a model and the corresponding tokenizer and embed function
     """
-    # Get current configuration
-    cfg = config.get_config()
-    
     # Model generates token-level embeddings, and output [cls] (+ linear + tanh)
     if "-sentence" not in embed_model_id:
         def pooling_fn(encoded_input, model_output):
@@ -1054,7 +1040,7 @@ def get_embedding_model_pipeline(embed_model_id: str):
             return token_sum / torch.clamp(input_expanded.sum(1), min=1e-9)
             
     # Return model (sent to correct device) and tokenizer
-    model_str = cfg["EMBEDDING_MODEL_ID_MAP"][embed_model_id]
+    model_str = g.cfg["EMBEDDING_MODEL_ID_MAP"][embed_model_id]
     model = AutoModel.from_pretrained(model_str)
     tokenizer = AutoTokenizer.from_pretrained(model_str)
     return model, tokenizer, pooling_fn

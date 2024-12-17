@@ -1,15 +1,11 @@
-# Basics
+# Utils
 import os
+from flask import g
 import json
 import torch
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-try:
-    import config
-except:
-    from . import config
-logger = config.CTxAILogger("INFO")
 
 # Models and data processing
 from sklearn.preprocessing import StandardScaler
@@ -19,7 +15,7 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import ConfusionMatrixDisplay, confusion_matrix, classification_report
 
-# Utils
+# Model utils
 from imblearn.over_sampling import SMOTE
 from tqdm import tqdm
 from collections import defaultdict, Counter
@@ -43,28 +39,25 @@ def run_experiment_2():
     """ Train an scikit-learn model on a CT-level classification task using
         cluster affordance of its eligibility criteria as input
     """
-    # Get configuration and go through all embedding models
-    cfg = config.get_config()
-    
-    for target_type in cfg["PREDICTOR_TARGET_TYPES"]:
-        for input_type in cfg["PREDICTOR_INPUT_TYPES"]:
+    for target_type in g.cfg["PREDICTOR_TARGET_TYPES"]:
+        for input_type in g.cfg["PREDICTOR_INPUT_TYPES"]:
             
             # Take model and retrieve cluster result dir
-            embed_model_id = cfg["PREDICTOR_EMBEDDING_MODEL_ID"]
-            result_dir = os.path.join(cfg["RESULT_DIR"], embed_model_id)
+            embed_model_id = g.cfg["PREDICTOR_EMBEDDING_MODEL_ID"]
+            result_dir = os.path.join(g.cfg["RESULT_DIR"], embed_model_id)
             
             # Build dataset and create splits
             X, y = extract_prediction_dataset(result_dir, target_type, input_type)
             X_train, X_val_test, y_train, y_val_test = train_test_split(
                 X, y,
-                test_size=0.3, random_state=cfg["RANDOM_STATE"],
+                test_size=0.3, random_state=g.cfg["RANDOM_STATE"],
             )
             X_val, X_test, y_val, y_test = train_test_split(
                 X_val_test, y_val_test,
-                test_size=0.5, random_state=cfg["RANDOM_STATE"],
+                test_size=0.5, random_state=g.cfg["RANDOM_STATE"],
             )
-            if cfg["BALANCE_PREDICTION_DATA"]:
-                smote = SMOTE(random_state=cfg["RANDOM_STATE"])
+            if g.cfg["BALANCE_PREDICTION_DATA"]:
+                smote = SMOTE(random_state=g.cfg["RANDOM_STATE"])
                 X_train, y_train = smote.fit_resample(X_train, y_train)
             
             # Normalize input features and output targets
@@ -79,13 +72,13 @@ def run_experiment_2():
             y_test = normalizer_y.transform(y_test)
             
             # Find best hyper-parameters and fit final regression model
-            logger.info("Finding best model for %s, %s" % (target_type, input_type))
+            g.logger.info("Finding best model for %s, %s" % (target_type, input_type))
             best_params = find_best_model(X_train, y_train, X_val, y_val)
             best_model = suggest_model(model_params=best_params)
             best_model.fit(X_train, y_train)
             
             # Test best model and write results to a directory
-            file_name = "T%s-I%s-P%s" % (target_type, input_type, "-".join(cfg["CHOSEN_PHASES"]))
+            file_name = "T%s-I%s-P%s" % (target_type, input_type, "-".join(g.cfg["CHOSEN_PHASES"]))
             output_path = os.path.join(result_dir, "predict_results", file_name)
             test_model(best_model, X_test, y_test, normalizer_y, output_path)
             
@@ -104,10 +97,6 @@ def extract_prediction_dataset(
     Returns:
         (tuple[np.ndarray, np.ndarray]): input feature and target arrays
     """
-    # Initialization
-    cfg = config.get_config()
-    take_ct_path_dict = {}
-    
     # Collect raw embeddings and cluster output data
     raw_embedding_path = result_dir.replace("results/", "processed/embeddings_") + ".pt"
     raw_embeddings = torch.load(raw_embedding_path).numpy()
@@ -116,6 +105,7 @@ def extract_prediction_dataset(
         cluster_output_data = json.load(f)
     
     # Pre-process each clinical trial data
+    taken_ct_path_dict = {}
     cluster_dict = defaultdict(list)
     red_embedding_dict = defaultdict(list)
     raw_embedding_dict = defaultdict(list)
@@ -135,19 +125,19 @@ def extract_prediction_dataset(
         for ec, ec_id in zip(ec_list, ec_ids):
             # Check processed clinical trial algigns with chosen phase(s)
             ct_path = ec["ct_id"]
-            if ct_path not in take_ct_path_dict:
+            if ct_path not in taken_ct_path_dict:
                 with open(ct_path, "r", encoding="utf-8") as file:
                     ct_raw_dict: dict[str, dict|bool] = json.load(file)
                 ct_phases = ct_raw_dict["protocolSection"]["designModule"]["phases"]
                 ct_phases = [p.lower() for p in ct_phases]
-                if all([p not in ct_phases for p in cfg["CHOSEN_PHASES"]])\
-                and cfg["CHOSEN_PHASES"] != []:
-                    take_ct_path_dict[ct_path] = False
+                if all([p not in ct_phases for p in g.cfg["CHOSEN_PHASES"]])\
+                and g.cfg["CHOSEN_PHASES"] != []:
+                    taken_ct_path_dict[ct_path] = False
                 else:
-                    take_ct_path_dict[ct_path] = True
+                    taken_ct_path_dict[ct_path] = True
             
             # Populate input feature data point
-            if take_ct_path_dict[ct_path]:
+            if taken_ct_path_dict[ct_path]:
                 raw_embedding = raw_embeddings[ec_id]
                 red_embedding = ec["reduced_embedding"]
                 cluster_dict[ct_path].append(cluster_id)
@@ -314,7 +304,7 @@ def test_model(
     
     # Log main performance indicator
     logged_perf = df_report["f1-score"]["macro avg"]
-    logger.info("Test-macro-avg-f1-score for this model: %.04f" % logged_perf)
+    g.logger.info("Test-macro-avg-f1-score for this model: %.04f" % logged_perf)
     
 
 if __name__ == "__main__":

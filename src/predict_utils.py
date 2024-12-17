@@ -1,10 +1,13 @@
-# Basics
+# Utils
 import numpy as np
-try:
-    import config
-except:
-    from . import config
-logger = config.CTxAILogger("INFO")
+import dask.array as da
+import optuna
+from optuna.samplers import TPESampler, RandomSampler
+from functools import partial
+from datetime import datetime
+from flask import g
+from typing import Any
+from cupyx.scipy.spatial.distance import cdist
 
 # Models and data processing
 from sklearn.base import BaseEstimator, TransformerMixin
@@ -14,15 +17,6 @@ from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.model_selection import cross_val_score
-
-# Utils
-import dask.array as da
-import optuna
-from optuna.samplers import TPESampler, RandomSampler
-from functools import partial
-from datetime import datetime
-from typing import Any
-from cupyx.scipy.spatial.distance import cdist
 
 # Warnings
 import warnings
@@ -46,7 +40,6 @@ def find_best_model(
         Scikit-learn model: trained model with best hyper-parameters
     """
     # Initialize objective and sampler
-    cfg = config.get_config()
     objective = partial(
         optuna_objective_fn,
         X_train=X_train,
@@ -54,17 +47,17 @@ def find_best_model(
         X_val=X_val,
         y_val=y_val,
     )
-    if cfg["OPTUNA_SAMPLER"] == "tpe":
-        sampler = TPESampler(seed=cfg["RANDOM_STATE"])
+    if g.cfg["OPTUNA_SAMPLER"] == "tpe":
+        sampler = TPESampler(seed=g.cfg["RANDOM_STATE"])
     else:
-        sampler = RandomSampler(seed=cfg["RANDOM_STATE"])
+        sampler = RandomSampler(seed=g.cfg["RANDOM_STATE"])
     
     # Optimizer hyper-parameters
     optuna.logging.set_verbosity(optuna.logging.WARNING)
     study = optuna.create_study(sampler=sampler, direction="maximize")
     study.optimize(
         func=objective,
-        n_trials=cfg["N_PREDICTION_OPTUNA_TRIALS"],
+        n_trials=g.cfg["N_PREDICTION_OPTUNA_TRIALS"],
         show_progress_bar=True,
     )
     

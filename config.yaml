@@ -2,8 +2,9 @@
 ENVIRONMENT: ctgov  # ctgov, ctxai_dev, ctxai_prod
 DATA_PATH: raw_files  # Test/2/metadata/intervention/intervention_similar_trials_full.xlsx
 SELECT_USER_ID_AND_PROJECT_ID_AUTOMATICALLY: True
-USER_ID: example_user_id  # any string (overwritten if SELECT_USER_ID_AND_PROJECT_ID_AUTOMATICALLY == True and ENVIRONMENT == ctgov)
-PROJECT_ID: example_project_id  # any string (overwritten if SELECT_USER_ID_AND_PROJECT_ID_AUTOMATICALLY == True and ENVIRONMENT == ctgov)
+USER_ID: default_user_id  # any string (overwritten if SELECT_USER_ID_AND_PROJECT_ID_AUTOMATICALLY == True and ENVIRONMENT == ctgov)
+PROJECT_ID: default_project_id  # any string (overwritten if SELECT_USER_ID_AND_PROJECT_ID_AUTOMATICALLY == True and ENVIRONMENT == ctgov)
+SESSION_ID: default_session_id  # used (for now only) by visualization web-API
 USER_FILTERING: null  # null, intervention, condition, intersection
 OPTUNA_SAMPLER: tpe  # tpe (presumably better), random (seed presumably more stable)
 RANDOM_STATE: 0123

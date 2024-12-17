@@ -1,4 +1,4 @@
-from . import config
+from . import config_utils
 from .parse_data import parse_data_fn
 from .parse_utils import (
     ClinicalTrialFilter,
@@ -14,7 +14,6 @@ from .cluster_utils import (
     ClusterOutput,
     get_dim_red_model,
     set_seeds,
-    redirect_tqdm_to_logger,
 )
 from .predict_data import run_experiment_2
 from .generate_utils import compute_scores
@@ -23,4 +22,4 @@ from .create_visualizations import (
     create_visualization_from_ct_info,
     extract_ct_info_for_visualization,
 )
-from .config import update_config
+from .config_utils import CustomTqdm, optuna_with_custom_tqdm, update_config

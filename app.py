@@ -1,10 +1,15 @@
 import os
 import json
+import base64
+import shutil
 import tempfile
-from flask import Flask, request, jsonify, render_template, send_file, redirect
+from flask import (
+    Flask, Response, request, g,
+    jsonify, render_template, send_file,
+)
 from typing import Any
 from src import (
-    config,
+    config_utils,
     parse_data_fn,
     cluster_data_fn,
     run_experiment_1,
@@ -12,8 +17,6 @@ from src import (
     create_visualizations_from_ct_paths_or_nct_ids,
     create_visualization_from_ct_info,
 )
-config.load_default_config()
-logger = config.CTxAILogger("INFO")
 
 PREFIX_PATH = "/ct-risk/cluster"
 INDEX_PATH = "%s/" % PREFIX_PATH
@@ -31,6 +34,79 @@ app = Flask(
 )
 
 
+@app.before_request
+def load_user_context() -> None:
+    """ Create per-request user-specific config and logger
+    """
+    # Retrieve a new random session identifier if required
+    session_id = request.cookies.get("session_id")
+    if not session_id:
+        session_id = create_new_session_id()
+        g.new_session_id = session_id  # track it for the after_request handler
+    else:
+        g.new_session_id = None  # no new cookie is needed
+        
+    # Create [user and session]-specific config and logger
+    g.cfg = config_utils.load_default_config()
+    g.cfg = config_utils.update_config(
+        cfg=g.cfg,
+        request_data={
+            "SESSION_ID": session_id,
+            "USER_ID": "vis-%s" % session_id,  # we want session specific result folders
+            "SELECT_USER_ID_AND_PROJECT_ID_AUTOMATICALLY": False,
+        }
+    )
+    g.logger = config_utils.CTxAILogger(level="INFO", session_id=session_id)
+    g.session_id = session_id
+
+
+def create_new_session_id(
+    n_session_id_chars: int=6,
+) -> str:
+    """ Create random fixed length string
+    """
+    random_bytes = os.urandom(n_session_id_chars)
+    random_str = base64.urlsafe_b64encode(random_bytes)
+    session_id = random_str.decode('utf-8').rstrip("=")[:n_session_id_chars]
+    
+    return session_id
+    
+    
+@app.after_request
+def set_session_id_cookie(response: Response) -> Response:
+    """ Set a session cookie if a new session_id was generated
+    """
+    if g.get("new_session_id"):
+        secure_cookie = "DEBUG_FLAG_FILE" not in os.listdir("utils")
+        response.set_cookie(
+            key="session_id",
+            value=g.new_session_id,
+            httponly=True,
+            secure=secure_cookie,
+        )
+        
+    return response
+
+
+@app.route("/cleanup-session-log", methods=["POST"])
+def cleanup_session_log():
+    """ Endpoint to clean up session-specific logs when the user leaves the page
+    """
+    session_id = request.cookies.get("session_id")
+    if not session_id:
+        return jsonify({"error": "No session ID found for clean-up"}), 400
+    
+    if os.path.exists(g.logger.log_path):
+        os.remove(g.logger.log_path)
+        g.logger.info(f"Deleted log file for session: {session_id}")
+        
+    if os.path.exists(g.cfg["USER_DIR"]):
+        shutil.rmtree(g.cfg["USER_DIR"])
+        g.logger.info(f"Deleted result files for session: {session_id}")
+        
+    return jsonify({"status": "Session cleanup successful"}), 200
+    
+
 @app.route(INDEX_PATH, methods=["GET"])
 def index():
     """ Serve the HTML form for the main page with user input
@@ -44,33 +120,24 @@ def serve_html():
     """
     html_path = request.args.get("path")
     if html_path and os.path.exists(html_path):
-        logger.info(f"Serving HTML file at {html_path}")
+        g.logger.info(f"Serving HTML file at {html_path}")
         return send_file(html_path, mimetype="text/html")
     else:
-        logger.error(f"Requested HTML file not found at {html_path}")
+        g.logger.error(f"Requested HTML file not found at {html_path}")
         return jsonify({"error": "File not found"}), 404
 
-
-# @app.before_request
-# def redirect_to_https():
-#     """ Redirect HTTP requests to HTTPS
-#     """
-#     if not request.is_secure:
-#         url = request.url.replace("http://", "https://", 1)
-#         return redirect(url, code=301)
-    
 
 @app.route(GET_LATEST_LOG_PATH, methods=["GET"])
 def get_latest_log():
     """ Serve the latest log line
     """
-    log_file_path = "logs/app.log"
+    log_file_path = g.logger.log_path
     if not os.path.exists(log_file_path):
         return jsonify({"log": "Log file not found"}), 404
     try:
         with open(log_file_path, "r") as log_file:
             lines = log_file.readlines()
-            last_line = lines[-1] if lines else "Log file is empty"
+            last_line = lines[-1] if lines else "Starting visualization"
             return jsonify({"log": last_line}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -82,24 +149,24 @@ def visualize():
     """
     # Validate request data
     request_data = request.get_json(force=True)
-    demo_response, demo_value = check_request_for_demo(request_data)
-    if demo_response is not None:
-        return demo_response, demo_value
-    logger.info(f"Starting visualization pipeline for mode {demo_value}")
+    demo_check_error, demo_value = check_request_for_demo(request_data)
+    if demo_check_error is not None:
+        return demo_check_error, 400
+    g.logger.info(f"Starting visualization pipeline for mode {demo_value}")
     
     # Generate visualizations based on demo mode value
-    visu_response, visu_value = generate_visualization(demo_value, request_data)
-    if visu_response is not None:
-        return visu_response, visu_value
-    logger.info(f"Visualization successfully generated for mode {demo_value}")
+    visu_error, visu_value = generate_visualization(demo_value, request_data)
+    if visu_error is not None:
+        return visu_error, 400
+    g.logger.info(f"Visualization successfully generated for mode {demo_value}")
     
     # Return the path to the visualization HTML file
     html_path = visu_value["html"]
     if os.path.exists(html_path):
-        logger.info(f"Generated visualization at {html_path}")
+        g.logger.info(f"Generated visualization at {html_path}")
         return jsonify({"html_path": f"{SERVE_HTML_PATH}?path={html_path}"})
     else:
-        logger.error(f"Visualization file not found at {html_path}")
+        g.logger.error(f"Visualization file not found at {html_path}")
         return jsonify({"error": "Visualization file not found"}), 404
 
 
@@ -167,8 +234,8 @@ def generate_visualization(demo_value: str, request_data: dict[str, Any]):
             )
         
         # Return no error response and the required visualization output
-        visu_response = None
-        return visu_response, visu_output
+        visu_error = None
+        return visu_error, visu_output
     
     # Return error message if visualiation failed for some reason
     except RuntimeError as visualisation_error:
@@ -180,10 +247,10 @@ def predict():
     """ Cluster data found in data_dir found in request's field
     """
     # Initialization and validation of required fields in JSON payload
-    logger.info("Starting eligibility criteria clustering pipeline")
+    g.logger.info("Starting eligibility criteria clustering pipeline")
     request_data = request.get_json(force=True)
     if "EXPERIMENT_MODE" in request_data:
-        logger.info("Experiment %1i being run" % request_data["EXPERIMENT_MODE"])
+        g.logger.info("Experiment %1i being run" % request_data["EXPERIMENT_MODE"])
     else:
         required_keys = [
             "ENVIRONMENT",
@@ -197,10 +264,10 @@ def predict():
             return jsonify({"error": "Missing field in request data"}), 400
     
     # Update in-memory configuration using request data
-    config.update_config(request_data)
+    g.cfg = config_utils.update_config(request_data)
     
     # Parse raw data into pre-processed data files
-    logger.info("Parsing criterion texts into individual criteria")
+    g.logger.info("Parsing criterion texts into individual criteria")
     parse_data_fn()
     
     # Perform one of the experiments
@@ -214,11 +281,11 @@ def predict():
     
     # Or simply cluster requested data (ctgov or ctxai)
     else:
-        logger.info("Clustering procedure started")
+        g.logger.info("Clustering procedure started")
         cluster_output = cluster_data_fn(request_data["EMBEDDING_MODEL_ID"])
     
     # Return jsonified file paths corresponding to the written data and plot
-    logger.info("Success!")
+    g.logger.info("Success!")
     return jsonify({
         "cluster_json_path": cluster_output.json_path,
         "cluster_visualization_paths": cluster_output.visualization_paths,

@@ -1,16 +1,12 @@
 import os
 import time
-try:
-    import config
-except:
-    from . import config
-logger = config.CTxAILogger("INFO")
 import logging
 logging.getLogger("transformers").setLevel(logging.ERROR)
+from flask import g
 try:
-    from .config import update_config
+    from src.config_utils import update_config
 except:
-    from .config import update_config
+    from .config_utils import update_config
 import torch
 import openai
 from openai import OpenAI
@@ -260,8 +256,7 @@ def get_openai_api_key():
     Returns:
         str: the OpenAI API key
     """
-    cfg = config.get_config()
-    api_path = os.path.join(cfg["CLUSTER_REPRESENTATION_PATH_TO_OPENAI_API_KEY"])
+    api_path = os.path.join(g.cfg["CLUSTER_REPRESENTATION_PATH_TO_OPENAI_API_KEY"])
     try:
         with open(api_path, "r", encoding="utf-8") as f: return f.read()
     except:
@@ -310,7 +305,7 @@ def generate_llm_response(
         
         # Expected error handling
         except openai.OpenAIError as e:
-            logger.error("Openai error occured (%s), retrying" % str(e))
+            g.logger.error("Openai error occured (%s), retrying" % str(e))
             user_prompt = user_prompt[int(len(user_prompt) * 0.9)]
         
         # Exponential back-off
@@ -343,7 +338,7 @@ def update_config_filters(
         to_update.update({"CHOSEN_COND_LVL": cond_filter_lvl})
     if "CHOSEN_ITRV_LVL" in kwargs:
         to_update.update({"CHOSEN_ITRV_LVL": itrv_filter_lvl})
-    logger.info("Evaluating ec-generation for ct with: %s" % to_update)
+    g.logger.info("Evaluating ec-generation for ct with: %s" % to_update)
     
     # Make sure that evaluated clinical trial is not considered for clustering 
     to_update.update({
@@ -358,7 +353,7 @@ def update_config_filters(
         to_update[key] = value
     
     # Update globally shared configuration with current information
-    update_config(request_data=to_update)
+    g.cfg = update_config(g.cfg, request_data=to_update)
 
 
 def extract_ids_at_lvl(
