@@ -181,7 +181,13 @@ def visualize():
         else:
             g.logger.error(f"Visualization file not found at {html_path}")
             return jsonify({"error": "Visualization file not found"}), 404
-        
+    
+    # In case anything happens
+    except Exception as e:
+        error_message = f"An error occurred during visualization: {str(e)}"
+        g.logger.error(error_message, exc_info=True)
+        return jsonify({"error": error_message}), 500
+    
     # Release lock for this session id
     finally:
         session_locks.pop(session_id, None)
