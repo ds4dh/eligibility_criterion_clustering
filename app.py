@@ -105,7 +105,7 @@ def cleanup_session_log():
         g.logger.info(f"Reset log file for session: {session_id}")
         
     if os.path.exists(g.cfg["USER_DIR"]):
-        shutil.rmtree(g.cfg["USER_DIR"])
+        shutil.rmtree(g.cfg["USER_DIR"])  # ignore_errors=True) -> maybe right problems on HEG? I don't think so
         g.logger.info(f"Deleted result files for session: {session_id}")
         
     return jsonify({"status": "Session cleanup successful"}), 200

@@ -64,6 +64,48 @@
     </div>
 
     <script>
+        
+        async function fetchWithRetry(url, options = {}, retries = 3, delay = 1000) {
+            for (let attempt = 0; attempt <= retries; attempt++) {
+                try {
+                    const response = await fetch(url, options);
+                    return response;
+                } catch (error) {
+                    if (attempt < retries) {
+                        console.warn(`Attempt ${attempt + 1} failed. Retrying in ${delay}ms...`);
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                    } else {
+                        console.error("Fetching failed for too long");
+                        throw error;
+                    }
+                }
+            }
+        }
+
+        function startPolling(logOutput) {
+            clearInterval(pollingInterval);
+            pollingInterval = setInterval(async () => {
+                if (document.hidden) return;  // stop polling if page is hidden
+                try {
+                    const response = await fetchWithRetry("/ct-risk/cluster/get-latest-log");  // ou que fetch?
+                    if (response.ok) {
+                        const logResult = await response.json();
+                        logOutput.textContent = logResult.log;
+                    }
+                } catch (error) {
+                    console.warn("Visualization log fetch failed: " + error.message);
+                }
+            }, 1000);
+        }
+        
+        function clearDefault(element) {
+            if (element.value === element.defaultValue) element.value = "";
+        }
+
+        function restoreDefault(element) {
+            if (!element.value.trim()) element.value = element.defaultValue;
+        }
+
         const demoModeSelect = document.getElementById("DEMO_MODE");
         const nctInput = document.getElementById("nctInput");
         const fileInput = document.getElementById("fileInput");
@@ -121,7 +163,7 @@
             let visualizationSuccessful = false; // flag to track visualization status
             
             try {
-                const response = await fetch("/ct-risk/cluster/visualize", {
+                const response = await fetchWithRetry("/ct-risk/cluster/visualize", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify(requestData),
@@ -161,11 +203,12 @@
                     logContainer.classList.add("hidden");
                     visualizationContainer.classList.remove("hidden");
                     visualizationSuccessful = true;
-
-                } else {
+                
+                } /* else {
                     visualizationSuccessful = false;
                     throw new Error("Visualization failed");
                 }
+                */
 
             } catch (error) {
                 visualizationSuccessful = false;
@@ -197,28 +240,17 @@
             }
         });
 
-        function startPolling(logOutput) {
-            clearInterval(pollingInterval);
-            pollingInterval = setInterval(async () => {
-                if (document.hidden) return;  // stop polling if page is hidden
-                try {
-                    const response = await fetch("/ct-risk/cluster/get-latest-log");
-                    if (response.ok) {
-                        const logResult = await response.json();
-                        logOutput.textContent = logResult.log;
-                    }
-                } catch (error) {
-                    console.warn("Visualization log fetch failed: " + error.message);
-                }
-            }, 1000);
-        }
-
         // Handle visibility changes
-        document.addEventListener("visibilitychange", () => {
+        document.addEventListener("visibilitychange", async () => {
             if (document.hidden) {
                 clearInterval(pollingInterval);
             } else {
-                startPolling(document.getElementById("logOutput"));
+                try {
+                    const logOutput = document.getElementById("logOutput");
+                    startPolling(logOutput); // restart polling when the page is again visible
+                } catch (error) {
+                    console.error("Error resuming operations: ", error);
+                }
             }
         });
 
@@ -253,16 +285,8 @@
             }
 
             scaleIframeContent();
-
+        
         });
-
-        function clearDefault(element) {
-            if (element.value === element.defaultValue) element.value = "";
-        }
-
-        function restoreDefault(element) {
-            if (!element.value.trim()) element.value = element.defaultValue;
-        }
 
     </script>
 </body>
