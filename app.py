@@ -36,6 +36,27 @@ app = Flask(
 session_locks = {}  # to avoid visualizing several times on the same session id
 
 
+
+
+# Remove all files in the 'logs' folder while keeping the folder itself
+logs_folder = "logs"
+if os.path.exists(logs_folder) and os.path.isdir(logs_folder):
+    for filename in os.listdir(logs_folder):
+        file_path = os.path.join(logs_folder, filename)
+        if os.path.isfile(file_path):
+            os.remove(file_path)
+
+# Remove all subfolders in 'data_ctgov' that start with "vis-"
+data_ctgov_folder = "data_ctgov"
+if os.path.exists(data_ctgov_folder) and os.path.isdir(data_ctgov_folder):
+    for folder_name in os.listdir(data_ctgov_folder):
+        folder_path = os.path.join(data_ctgov_folder, folder_name)
+        if os.path.isdir(folder_path) and folder_name.startswith("vis-"):
+            shutil.rmtree(folder_path)
+
+
+
+
 @app.before_request
 def load_user_context() -> None:
     """ Create per-request user-specific config and logger
