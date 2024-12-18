@@ -1,6 +1,5 @@
 :root {
     --max-width: 375px;
-    /* --max-width: 500px; */
 }
 
 html, body {
@@ -48,7 +47,6 @@ iframe {
     height: 40px;
     box-sizing: border-box;
     border: 1px solid #ccc;
-    /* border: 2px solid #484848; */
 }
 
 .github-button {
@@ -103,7 +101,6 @@ input, select, button {
     box-sizing: border-box;
     width: 100%;
     padding: 8px;
-    /* margin-bottom: 0px; */
     border: 1px solid #ccc;
     border-radius: 4px;
     font-size: 16px;
@@ -115,7 +112,6 @@ input:focus, select:focus, button:focus {
 }
 
 button {
-    /* background-color: #007BFF; */
     background-color: initial;
     background-image: linear-gradient(-180deg, #0a64c5, #002863);
     color: white;
@@ -131,13 +127,12 @@ button {
 }
 
 button:hover {
-    /* background-color: #0056b3; */
     background-color: initial;
     background-image: linear-gradient(-180deg, #054e9c, #000917);
 }
 
 button:disabled {
-    cursor: not-allowed;
+    pointer-events: none;
     background-color: initial;
     background-image: linear-gradient(-180deg, #054e9c, #000917); /* Same as hover */
 }

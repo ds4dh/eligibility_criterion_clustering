@@ -94,7 +94,7 @@
             logOutput.textContent = "";
 
             visualizeButton.disabled = true;
-            visualizeButton.classList.add('loading');
+            visualizeButton.classList.add('loading', 'disabled');
             visualizeButton.querySelector('.button-text').textContent = 'Generating...';
 
             const requestData = {};
@@ -130,7 +130,7 @@
                 alert('Error: ' + error.message);
             } finally {
                 visualizeButton.disabled = false;
-                visualizeButton.classList.remove('loading');
+                visualizeButton.classList.remove('loading', 'disabled');
                 visualizeButton.querySelector('.button-text').textContent = 'Visualize';
                 clearInterval(pollingInterval);
             }
@@ -139,7 +139,7 @@
         function startPolling(logOutput) {
             clearInterval(pollingInterval);
             pollingInterval = setInterval(async () => {
-                if (document.hidden) return; // Stop polling if page is hidden
+                if (document.hidden) return;  // stop polling if page is hidden
                 const response = await fetch('/ct-risk/cluster/get-latest-log');
                 if (response.ok) {
                     const logResult = await response.json();
