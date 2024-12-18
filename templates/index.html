@@ -126,8 +126,8 @@
                     logContainer.classList.add('hidden');
                     visualizationContainer.classList.remove('hidden');
                 } else throw new Error('Visualization failed');
-            } catch (error) {
-                alert('Error: ' + error.message);
+            /* } catch (error) {
+                alert('Error: ' + error.message); */
             } finally {
                 visualizeButton.disabled = false;
                 visualizeButton.classList.remove('loading', 'disabled');
