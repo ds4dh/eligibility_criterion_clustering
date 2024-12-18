@@ -87,7 +87,7 @@
             pollingInterval = setInterval(async () => {
                 if (document.hidden) return;  // stop polling if page is hidden
                 try {
-                    const response = await fetchWithRetry("/ct-risk/cluster/get-latest-log");  // ou que fetch?
+                    const response = await fetch("/ct-risk/cluster/get-latest-log");  // ou fetchWithRetry?
                     if (response.ok) {
                         const logResult = await response.json();
                         logOutput.textContent = logResult.log;
