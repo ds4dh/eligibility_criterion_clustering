@@ -136,10 +136,19 @@ button:hover {
     background-image: linear-gradient(-180deg, #054e9c, #000917);
 }
 
+button:disabled {
+    cursor: not-allowed;
+    background-color: initial;
+    background-image: linear-gradient(-180deg, #054e9c, #000917); /* Same as hover */
+}
+
 button .spinner {
     display: none;
     border: 3px solid #f3f3f3;
-    border-top: 3px solid white;
+    border-top: 3px solid rgba(255, 255, 255, 1.0);
+    border-right: 3px solid rgba(255, 255, 255, 0.75);
+    border-bottom: 3px solid rgba(255, 255, 255, 1.0);
+    border-left: 3px solid rgba(255, 255, 255, 0.75);
     border-radius: 50%;
     width: 20px;
     height: 20px;

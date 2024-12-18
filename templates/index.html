@@ -12,6 +12,7 @@
         <a href="https://github.com/ds4dh/eligibility_criterion_clustering" target="_blank" class="action-button github-button">Github</a>
         <a href="https://www.medrxiv.org/content/10.1101/2024.10.08.24315075v1" target="_blank" class="action-button paper-button">Paper</a>
     </div>    
+
     <form id="visualizationForm">
         <label for="DEMO_MODE">Demo mode:</label>
         <select id="DEMO_MODE" name="DEMO_MODE" required>
@@ -39,34 +40,11 @@
 
         <div id="ctInfoInput" class="input-section hidden">
             <label for="CHOSEN_PHASES">Target phases:</label>
-            <input
-                type="text"
-                id="CHOSEN_PHASES"
-                name="CHOSEN_PHASES"
-                value="phase1,phase2"
-                onfocus="clearDefault(this)"
-                onblur="restoreDefault(this)"
-            ><br><br>
-
+            <input type="text" id="CHOSEN_PHASES" name="CHOSEN_PHASES" value="phase1,phase2"><br><br>
             <label for="CHOSEN_COND_IDS">Target condition ID(s):</label>
-            <input
-                type="text"
-                id="CHOSEN_COND_IDS"
-                name="CHOSEN_COND_IDS"
-                value="C04.557.386,C15.604.515.569,C20.683.515.761"
-                onfocus="clearDefault(this)"
-                onblur="restoreDefault(this)"
-            ><br><br>
-
+            <input type="text" id="CHOSEN_COND_IDS" name="CHOSEN_COND_IDS" value="C04.557.386,C15.604.515.569,C20.683.515.761"><br><br>
             <label for="CHOSEN_ITRV_IDS">Target intervention ID(s):</label>
-            <input
-                type="text"
-                id="CHOSEN_ITRV_IDS"
-                name="CHOSEN_ITRV_IDS"
-                value="D02.455.426.559.847.638.960.423,D04.615"
-                onfocus="clearDefault(this)"
-                onblur="restoreDefault(this)"
-            ><br><br>
+            <input type="text" id="CHOSEN_ITRV_IDS" name="CHOSEN_ITRV_IDS" value="D02.455.426.559.847.638.960.423,D04.615"><br><br>
         </div>
 
         <button type="submit" id="visualizeButton">
@@ -82,10 +60,7 @@
 
     <div id="visualizationContainer" class="section hidden">
         <h2>Visualization</h2>
-        <iframe
-            id="visualizationFrame"
-            hidden
-        ></iframe>
+        <iframe id="visualizationFrame" hidden></iframe>
     </div>
 
     <script>
@@ -93,6 +68,7 @@
         const nctInput = document.getElementById('nctInput');
         const fileInput = document.getElementById('fileInput');
         const ctInfoInput = document.getElementById('ctInfoInput');
+        let pollingInterval = null;
 
         demoModeSelect.addEventListener('change', () => {
             const selectedMode = demoModeSelect.value;
@@ -100,51 +76,32 @@
             fileInput.classList.toggle('hidden', selectedMode !== 'ct_file');
             ctInfoInput.classList.toggle('hidden', selectedMode !== 'ct_info');
         });
-        
-        window.addEventListener("beforeunload", function (e) {
-            // Send a synchronous cleanup request to ensure it completes before unload
-            navigator.sendBeacon("/cleanup-session-log");
-        });
 
         document.getElementById('visualizationForm').addEventListener('submit', async (event) => {
             event.preventDefault();
-            
+
             const formData = new FormData(event.target);
             const demoMode = formData.get('DEMO_MODE');
-            const visualizeButton = document.getElementById('visualizeButton');
-            const logContainer = document.getElementById('logContainer');
             const logOutput = document.getElementById('logOutput');
-            const visualizationContainer = document.getElementById('visualizationContainer');
             const visualizationFrame = document.getElementById('visualizationFrame');
-            
-            // Show log container, hide visualization
+            const logContainer = document.getElementById('logContainer');
+            const visualizationContainer = document.getElementById('visualizationContainer');
+            const visualizeButton = document.getElementById('visualizeButton');
+
             logContainer.classList.remove('hidden');
             visualizationContainer.classList.add('hidden');
             visualizationFrame.hidden = true;
-            logOutput.textContent = ""; // clear previous logs
+            logOutput.textContent = "";
 
-            // Update button text and show spinner
+            visualizeButton.disabled = true;
             visualizeButton.classList.add('loading');
-            visualizeButton.querySelector('.button-text').textContent = 'Generating (can take a few minutes)';
-            
+            visualizeButton.querySelector('.button-text').textContent = 'Generating...';
+
             const requestData = {};
             if (demoMode === 'ct_file') {
-                const fileInputElem = document.getElementById('TARGET_CT_FILE');
-                if (fileInputElem.files.length === 0) {
-                    alert('Please upload a file.');
-                    resetButton();
-                    return;
-                }
-                
-                const file = fileInputElem.files[0];
-                const fileContents = await file.text();
-                try {
-                    requestData.TARGET_CT_DICT = JSON.parse(fileContents);
-                } catch (error) {
-                    alert('Invalid JSON file.');
-                    resetButton();
-                    return;
-                }
+                const file = document.getElementById('TARGET_CT_FILE').files[0];
+                if (!file) return alert('Please upload a file.');
+                requestData.TARGET_CT_DICT = JSON.parse(await file.text());
             } else if (demoMode === 'nct_id') {
                 requestData.TARGET_NCT_ID = formData.get('TARGET_NCT_ID');
             } else if (demoMode === 'ct_info') {
@@ -153,55 +110,56 @@
                 requestData.CHOSEN_ITRV_IDS = formData.get('CHOSEN_ITRV_IDS').split(',').map(s => s.trim());
             }
             requestData.DEMO_MODE = demoMode;
-            
-            let pollingInterval;
+
+            startPolling(logOutput);
+
             try {
-                // Start polling for log updates
-                pollingInterval = setInterval(async () => {
-                    const logResponse = await fetch('/ct-risk/cluster/get-latest-log');
-                    if (logResponse.ok) {
-                        const logResult = await logResponse.json();
-                        logOutput.textContent = logResult.log;
-                    }
-                }, 1000);
-                
                 const response = await fetch('/ct-risk/cluster/visualize', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(requestData),
                 });
-                
                 if (response.ok) {
                     const result = await response.json();
-                    const htmlPath = result.html_path;
-                    
-                    visualizationFrame.src = htmlPath; // load the visualization file
-                    visualizationFrame.hidden = false; // show the iframe
-                    visualizationContainer.classList.remove('hidden'); // show the visualization container
-                    logContainer.classList.add('hidden'); // hide the log container
-                } else {
-                    const errorText = await response.json();
-                    alert('Error: ' + errorText.error);
-                    location.reload(); // reload the page
-                }
+                    visualizationFrame.src = result.html_path;
+                    visualizationFrame.hidden = false;
+                    logContainer.classList.add('hidden');
+                    visualizationContainer.classList.remove('hidden');
+                } else throw new Error('Visualization failed');
             } catch (error) {
-                console.error('Error:', error);
-                alert('An error occurred while processing your request.');
-                location.reload(); // reload the page
+                alert('Error: ' + error.message);
             } finally {
-                // Stop polling for logs
-                clearInterval(pollingInterval);
-                
-                // Reset button to original state
-                resetButton();
-            }
-            
-            function resetButton() {
+                visualizeButton.disabled = false;
                 visualizeButton.classList.remove('loading');
                 visualizeButton.querySelector('.button-text').textContent = 'Visualize';
+                clearInterval(pollingInterval);
             }
+        });
+
+        function startPolling(logOutput) {
+            clearInterval(pollingInterval);
+            pollingInterval = setInterval(async () => {
+                if (document.hidden) return; // Stop polling if page is hidden
+                const response = await fetch('/ct-risk/cluster/get-latest-log');
+                if (response.ok) {
+                    const logResult = await response.json();
+                    logOutput.textContent = logResult.log;
+                }
+            }, 1000);
+        }
+
+        // Handle visibility changes
+        document.addEventListener("visibilitychange", () => {
+            if (document.hidden) {
+                clearInterval(pollingInterval);
+            } else {
+                startPolling(document.getElementById('logOutput'));
+            }
+        });
+
+        // Cleanup on page unload
+        window.addEventListener("beforeunload", () => {
+            navigator.sendBeacon("/cleanup-session-log");
         });
 
         document.getElementById('visualizationFrame').addEventListener('load', function () {
@@ -213,49 +171,30 @@
                 const contentBody = iframeContent.body;
 
                 if (!contentBody) return; // ensure the content is loaded
-
-                // Ensure the iframe content does not overflow
+                
                 iframeContent.documentElement.style.overflow = 'hidden';
                 contentBody.style.overflow = 'hidden';
-
-                // Set consistent margin and padding for the content
                 contentBody.style.margin = '0';
                 contentBody.style.padding = '0';
-
-                // Calculate the content width excluding the margins
+                
                 const contentWidth = contentBody.scrollWidth;
-
-                // Calculate the scaling factor to fit the content within the iframe width
                 const scaleFactor = iframe.clientWidth / contentWidth;
-
-                // Apply the scaling transformation to the content
                 contentBody.style.transform = `scale(${scaleFactor})`;
                 contentBody.style.transformOrigin = 'center';
-
-                // Calculate scaled height dynamically
+                
                 const scaledHeight = contentBody.scrollHeight * scaleFactor;
-
-                // Adjust the iframe height to fit the scaled content precisely
                 iframe.style.height = `${Math.ceil(scaledHeight)}px`;
-
-                // Set the iframe's overflow to hidden to prevent scrollbars
                 iframe.style.overflow = 'hidden';
             }
-
-            // Scale content when the iframe loads
             scaleIframeContent();
         });
-        
+
         function clearDefault(element) {
-            if (element.value === element.defaultValue) {
-                element.value = ""; // clear the field when focused if it matches the default value
-            }
+            if (element.value === element.defaultValue) element.value = "";
         }
-        
+
         function restoreDefault(element) {
-            if (element.value.trim() === "") {
-                element.value = element.defaultValue; // restore the default value if the field is empty
-            }
+            if (!element.value.trim()) element.value = element.defaultValue;
         }
     </script>
 </body>

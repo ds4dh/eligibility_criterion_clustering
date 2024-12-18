@@ -3,14 +3,9 @@ import yaml
 import logging
 import warnings
 import optuna
-import threading
-from flask import g
 from functools import partial
 from contextlib import contextmanager
 from tqdm import tqdm as original_tqdm
-
-
-# thread_lock = threading.Lock()  # lock for thread-safe cfg updates and logging
 
 
 def load_default_config(default_path: str="config.yaml") -> dict:
@@ -52,11 +47,11 @@ def align_config(cfg):
     # Check in which environment eligibility criteria clustering is run
     match cfg["ENVIRONMENT"]:
         case "ctgov":
-            base_dir = "data_ctgov"
+            cfg["BASE_DIR"] = "data_ctgov"
         case "ctxai_dev":
-            base_dir = os.path.join("data_dev", "upload")
+            cfg["BASE_DIR"] = os.path.join("data_dev", "upload")
         case "ctxai_prod":
-            base_dir = os.path.join("data_prod", "upload")
+            cfg["BASE_DIR"] = os.path.join("data_prod", "upload")
         case _:
             raise ValueError("Invalid ENVIRONMENT config variable.")
         
@@ -114,19 +109,19 @@ def align_config(cfg):
         )
     
     # Determine user and output directory, where all outputs will be saved
-    cfg["USER_DIR"] = os.path.join(base_dir, cfg["USER_ID"])
-    output_dir = os.path.join(cfg["USER_DIR"], cfg["PROJECT_ID"])
+    cfg["USER_DIR"] = os.path.join(cfg["BASE_DIR"], cfg["USER_ID"])
+    cfg["PROJECT_DIR"] = os.path.join(cfg["USER_DIR"], cfg["PROJECT_ID"])
     if cfg["USER_FILTERING"] is not None:
-        output_dir = os.path.join(output_dir, cfg["USER_FILTERING"])
-    
+        cfg["PROJECT_DIR"] = os.path.join(cfg["PROJECT_DIR"], cfg["USER_FILTERING"])
+        
     # Create and register all required paths and directories
-    cfg["FULL_DATA_PATH"] = os.path.join(base_dir, cfg["DATA_PATH"])
-    cfg["PROCESSED_DIR"] = os.path.join(output_dir, "processed")
-    cfg["RESULT_DIR"] = os.path.join(output_dir, "results")
+    cfg["FULL_DATA_PATH"] = os.path.join(cfg["BASE_DIR"], cfg["DATA_PATH"])
+    cfg["PROCESSED_DIR"] = os.path.join(cfg["PROJECT_DIR"], "processed")
+    cfg["RESULT_DIR"] = os.path.join(cfg["PROJECT_DIR"], "results")
     
-    # Special case for ctgov environment, where pre-processed data is re-used
+    # Special case for ctgov environment, where pre-processed may be re-used
     if cfg["ENVIRONMENT"] == "ctgov":
-        cfg["PREPROCESSED_DIR"] = base_dir  # cfg["FULL_DATA_PATH"]
+        cfg["PREPROCESSED_DIR"] = cfg["BASE_DIR"]  # cfg["FULL_DATA_PATH"]
     else:
         cfg["PREPROCESSED_DIR"] = cfg["PROCESSED_DIR"]
         

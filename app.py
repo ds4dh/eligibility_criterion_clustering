@@ -47,6 +47,7 @@ def load_user_context() -> None:
         g.new_session_id = None  # no new cookie is needed
         
     # Create [user and session]-specific config and logger
+    g.session_id = session_id
     g.cfg = config_utils.load_default_config()
     g.cfg = config_utils.update_config(
         cfg=g.cfg,
@@ -57,7 +58,6 @@ def load_user_context() -> None:
         }
     )
     g.logger = config_utils.CTxAILogger(level="INFO", session_id=session_id)
-    g.session_id = session_id
 
 
 def create_new_session_id(
@@ -137,7 +137,7 @@ def get_latest_log():
     try:
         with open(log_file_path, "r") as log_file:
             lines = log_file.readlines()
-            last_line = lines[-1] if lines else "Starting visualization"
+            last_line = lines[-1] if lines else "Initializing"
             return jsonify({"log": last_line}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
