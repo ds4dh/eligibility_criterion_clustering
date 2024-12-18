@@ -54,7 +54,7 @@ if os.path.exists(data_ctgov_folder) and os.path.isdir(data_ctgov_folder):
         if os.path.isdir(folder_path) and folder_name.startswith("vis-"):
             shutil.rmtree(folder_path)
 
-
+exit()
 
 
 @app.before_request
