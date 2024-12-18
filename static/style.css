@@ -131,10 +131,10 @@ button:hover {
     background-image: linear-gradient(-180deg, #054e9c, #000917);
 }
 
-button:disabled {
+button:disabled, button.disabled {
     pointer-events: none;
     background-color: initial;
-    background-image: linear-gradient(-180deg, #054e9c, #000917); /* Same as hover */
+    background-image: linear-gradient(-180deg, #054e9c, #000917);
 }
 
 button .spinner {
