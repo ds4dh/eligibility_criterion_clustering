@@ -33,6 +33,8 @@ app = Flask(
     static_url_path=STATIC_URL_PATH,
 )
 
+session_locks = {}  # to avoid visualizing several times on the same session id
+
 
 @app.before_request
 def load_user_context() -> None:
@@ -95,6 +97,8 @@ def cleanup_session_log():
     session_id = request.cookies.get("session_id")
     if not session_id:
         return jsonify({"error": "No session ID found for clean-up"}), 400
+    if session_id in session_locks:
+        return jsonify({"error": "Not deleting: visualization in progress for this session."}), 429
     
     if os.path.exists(g.logger.log_path):
         os.remove(g.logger.log_path)
@@ -147,29 +151,42 @@ def get_latest_log():
 def visualize():
     """ Handle visualization logic for a given request and demonstration mode
     """
-    # Validate request data
-    request_data = request.get_json(force=True)
-    demo_check_error, demo_value = check_request_for_demo(request_data)
-    if demo_check_error is not None:
-        return demo_check_error, 400
-    g.logger.info(f"Starting visualization pipeline for mode {demo_value}")
+    # Check this session does not already run a visualization
+    session_id = request.cookies.get("session_id")
+    if session_id in session_locks:
+        return jsonify({"error": "A visualization is still in progress for your session."}), 429
     
-    # Generate visualizations based on demo mode value
-    visu_error, visu_value = generate_visualization(demo_value, request_data)
-    if visu_error is not None:
-        return visu_error, 400
-    g.logger.info(f"Visualization successfully generated for mode {demo_value}")
+    # Visualization itself (try loop to handle session locks)
+    try:
+        session_locks[session_id] = True  # global update
     
-    # Return the path to the visualization HTML file
-    html_path = visu_value["html"]
-    if os.path.exists(html_path):
-        g.logger.info(f"Generated visualization at {html_path}")
-        return jsonify({"html_path": f"{SERVE_HTML_PATH}?path={html_path}"})
-    else:
-        g.logger.error(f"Visualization file not found at {html_path}")
-        return jsonify({"error": "Visualization file not found"}), 404
-
-
+        # Validate request data
+        request_data = request.get_json(force=True)
+        demo_check_error, demo_value = check_request_for_demo(request_data)
+        if demo_check_error is not None:
+            return demo_check_error, 400
+        g.logger.info(f"Starting visualization pipeline for mode {demo_value}")
+        
+        # Generate visualizations based on demo mode value
+        visu_error, visu_value = generate_visualization(demo_value, request_data)
+        if visu_error is not None:
+            return visu_error, 400
+        g.logger.info(f"Visualization successfully generated for mode {demo_value}")
+        
+        # Return the path to the visualization HTML file
+        html_path = visu_value["html"]
+        if os.path.exists(html_path):
+            g.logger.info(f"Generated visualization at {html_path}")
+            return jsonify({"html_path": f"{SERVE_HTML_PATH}?path={html_path}"})
+        else:
+            g.logger.error(f"Visualization file not found at {html_path}")
+            return jsonify({"error": "Visualization file not found"}), 404
+        
+    # Release lock for this session id
+    finally:
+        session_locks.pop(session_id, None)
+        
+        
 def check_request_for_demo(request_data: dict[str, Any]):
     """ Check that required fields are in the request data, given situation
     """
