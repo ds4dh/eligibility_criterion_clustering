@@ -98,11 +98,11 @@ def cleanup_session_log():
     if not session_id:
         return jsonify({"error": "No session ID found for clean-up"}), 400
     if session_id in session_locks:
-        return jsonify({"error": "Not deleting: visualization in progress for this session."}), 429
+        return jsonify({"error": "Not deleting: files being used by your session."}), 423
     
     if os.path.exists(g.logger.log_path):
         os.remove(g.logger.log_path)
-        g.logger.info(f"Deleted log file for session: {session_id}")
+        g.logger.info(f"Reset log file for session: {session_id}")
         
     if os.path.exists(g.cfg["USER_DIR"]):
         shutil.rmtree(g.cfg["USER_DIR"])
