@@ -65,35 +65,69 @@
 
     <script>
         
-        async function fetchWithRetry(url, options = {}, retries = 3, delay = 1000) {
-            for (let attempt = 0; attempt <= retries; attempt++) {
-                try {
-                    const response = await fetch(url, options);
-                    return response;
-                } catch (error) {
-                    if (attempt < retries) {
-                        console.warn(`Attempt ${attempt + 1} failed. Retrying in ${delay}ms...`);
-                        await new Promise(resolve => setTimeout(resolve, delay));
-                    } else {
-                        console.error("Fetching failed for too long");
-                        throw error;
+        // Track visualization state in localStorage
+        function saveVisualizationState(state) {
+            localStorage.setItem("visualizationState", JSON.stringify(state));
+        }
+
+        function getVisualizationState() {
+            return JSON.parse(localStorage.getItem("visualizationState"));
+        }
+
+        function clearVisualizationState() {
+            localStorage.removeItem("visualizationState");
+        }
+        
+        // Check server state on visibility change
+        async function checkVisualizationProgress(logOutput, visualizationFrame, logContainer, visualizationContainer) {
+            const visualizationState = getVisualizationState();
+            if (!visualizationState) return;
+
+            try {
+                const response = await fetch("/ct-risk/cluster/get-latest-result");
+                if (response.ok) {
+                    const logResult = await response.json();
+                    logOutput.textContent = logResult.log;
+
+                    if (visualizationState.inProgress) {
+                        // Update UI with visualization status
+                        if (logResult.log.includes("Visualization complete")) {
+                            visualizationFrame.src = visualizationState.htmlPath;
+                            visualizationFrame.hidden = false;
+                            logContainer.classList.add("hidden");
+                            visualizationContainer.classList.remove("hidden");
+                            clearVisualizationState();
+                        }
                     }
                 }
+            } catch (error) {
+                console.warn("Error checking visualization progress:", error.message);
             }
         }
 
-        function startPolling(logOutput) {
+        function startPolling(logOutput, visualizationFrame, logContainer, visualizationContainer) {
             clearInterval(pollingInterval);
             pollingInterval = setInterval(async () => {
-                if (document.hidden) return;  // stop polling if page is hidden
+                if (document.hidden) return; // stop polling if page is hidden
+        
                 try {
-                    const response = await fetch("/ct-risk/cluster/get-latest-log");  // ou fetchWithRetry?
+                    const response = await fetch("/ct-risk/cluster/get-latest-result");
                     if (response.ok) {
-                        const logResult = await response.json();
-                        logOutput.textContent = logResult.log;
+                        const result = await response.json();
+                        logOutput.textContent = result.log;
+        
+                        if (result.html_path) {
+                            // If HTML path exists, display the visualization
+                            visualizationFrame.src = `/ct-risk/cluster/serve-html?path=${encodeURIComponent(result.html_path)}`;
+                            visualizationFrame.hidden = false;
+                            logContainer.classList.add("hidden");
+                            visualizationContainer.classList.remove("hidden");
+                            setVisualizeButtonState("on");
+                            clearInterval(pollingInterval); // stop polling
+                        }
                     }
                 } catch (error) {
-                    console.warn("Visualization log fetch failed: " + error.message);
+                    console.warn("Polling failed:", error.message);
                 }
             }, 1000);
         }
@@ -104,6 +138,19 @@
 
         function restoreDefault(element) {
             if (!element.value.trim()) element.value = element.defaultValue;
+        }
+
+        function setVisualizeButtonState(state) {
+            const visualizeButton = document.getElementById("visualizeButton");
+            if (state === "on") {
+                visualizeButton.disabled = false;
+                visualizeButton.classList.remove("loading", "disabled");
+                visualizeButton.querySelector(".button-text").textContent = "Visualize";
+            } else if (state === "off") {
+                visualizeButton.disabled = true;
+                visualizeButton.classList.add("loading", "disabled");
+                visualizeButton.querySelector(".button-text").textContent = "Generating...";
+            }
         }
 
         const demoModeSelect = document.getElementById("DEMO_MODE");
@@ -128,25 +175,20 @@
             const visualizationFrame = document.getElementById("visualizationFrame");
             const logContainer = document.getElementById("logContainer");
             const visualizationContainer = document.getElementById("visualizationContainer");
-            const visualizeButton = document.getElementById("visualizeButton");
         
             logContainer.classList.remove("hidden");
             visualizationContainer.classList.add("hidden");
             visualizationFrame.hidden = true;
             logOutput.textContent = "";
         
-            visualizeButton.disabled = true;
-            visualizeButton.classList.add("loading", "disabled");
-            visualizeButton.querySelector(".button-text").textContent = "Generating...";
+            setVisualizeButtonState("off");
         
-            const requestData = {};
+            const requestData = { DEMO_MODE: demoMode };
             if (demoMode === "ct_file") {
                 const file = document.getElementById("TARGET_CT_FILE").files[0];
                 if (!file) {
                     alert("Please upload a file.");
-                    visualizeButton.disabled = false;
-                    visualizeButton.classList.remove("loading", "disabled");
-                    visualizeButton.querySelector(".button-text").textContent = "Visualize";
+                    setVisualizeButtonState("on");
                     return;
                 }
                 requestData.TARGET_CT_DICT = JSON.parse(await file.text());
@@ -157,103 +199,44 @@
                 requestData.CHOSEN_COND_IDS = formData.get("CHOSEN_COND_IDS").split(",").map(s => s.trim());
                 requestData.CHOSEN_ITRV_IDS = formData.get("CHOSEN_ITRV_IDS").split(",").map(s => s.trim());
             }
-            requestData.DEMO_MODE = demoMode;
-
-            startPolling(logOutput);
-            let visualizationSuccessful = false; // flag to track visualization status
             
+            startPolling(logOutput, visualizationFrame, logContainer, visualizationContainer);
+            
+            let response = null;
             try {
-                const response = await fetchWithRetry("/ct-risk/cluster/visualize", {
+                response = await fetch("/ct-risk/cluster/visualize", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify(requestData),
                 });
-
-                if (response.status === 423) {
-                    /* TODO */
-                    return;
-                }
-
+        
                 if (response.status === 429) {
-                    const errorData = await response.json();
-                    alert(errorData.error || "A visualization is still in progress for your session.");
-                    visualizeButton.disabled = false;
-                    visualizeButton.classList.remove("loading", "disabled");
-                    visualizeButton.querySelector(".button-text").textContent = "Visualize";
-                    clearInterval(pollingInterval);
-                    visualizationSuccessful = false;
-                    return;
+                    const responseData = await response.json();
+                    alert(responseData.error || "Coming back simulation of this session.");
                 }
-
-                if (response.status === 500) {
-                    const errorData = await response.json();
-                    alert(errorData.error || "An unexpected error occurred during visualization.");
-                    visualizeButton.disabled = false;
-                    visualizeButton.classList.remove("loading", "disabled");
-                    visualizeButton.querySelector(".button-text").textContent = "Visualize";
-                    clearInterval(pollingInterval);
-                    visualizationSuccessful = false;
-                    return;
-                }
-
-                if (response.ok) {
-                    const result = await response.json();
-                    visualizationFrame.src = result.html_path;
-                    visualizationFrame.hidden = false;
-                    logContainer.classList.add("hidden");
-                    visualizationContainer.classList.remove("hidden");
-                    visualizationSuccessful = true;
-                
-                } /* else {
-                    visualizationSuccessful = false;
-                    throw new Error("Visualization failed");
-                }
-                */
-
+            
             } catch (error) {
-                visualizationSuccessful = false;
-                alert("An error occurred: " + (error.message || "Unexpected error"));
-
+                alert("An error occurred: " + error.message);
+                setVisualizeButtonState("on");
+            
             } finally {
-                // Re-enable the visualize button and reset its state
-                visualizeButton.disabled = false;
-                visualizeButton.classList.remove("loading", "disabled");
-                visualizeButton.querySelector(".button-text").textContent = "Visualize";
-
-                // Clear the polling interval
-                clearInterval(pollingInterval);
-                
-                // Reset other stuff only if visualization was not successful
-                if (!visualizationSuccessful) {
-
-                    // Reset the visualization frame and form to their initial states
-                    const visualizationFrame = document.getElementById("visualizationFrame");
-                    const logContainer = document.getElementById("logContainer");
-                    const visualizationContainer = document.getElementById("visualizationContainer");
-
-                    // Hide visualization-related sections
-                    visualizationFrame.hidden = true;
-                    visualizationContainer.classList.add("hidden");
-                    logContainer.classList.add("hidden");
-
+                if (response && response.status !== 429) {
+                    setVisualizeButtonState("on");
                 }
             }
         });
 
         // Handle visibility changes
         document.addEventListener("visibilitychange", async () => {
-            if (document.hidden) {
-                clearInterval(pollingInterval);
-            } else {
-                try {
-                    const logOutput = document.getElementById("logOutput");
-                    startPolling(logOutput); // restart polling when the page is again visible
-                } catch (error) {
-                    console.error("Error resuming operations: ", error);
-                }
+            if (!document.hidden) {
+                const logOutput = document.getElementById("logOutput");
+                const visualizationFrame = document.getElementById("visualizationFrame");
+                const logContainer = document.getElementById("logContainer");
+                const visualizationContainer = document.getElementById("visualizationContainer");
+                await checkVisualizationProgress(logOutput, visualizationFrame, logContainer, visualizationContainer);
             }
         });
-
+        
         // Cleanup on page unload
         window.addEventListener("beforeunload", () => {
             navigator.sendBeacon("/cleanup-session-log");

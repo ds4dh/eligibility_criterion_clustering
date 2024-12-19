@@ -170,12 +170,12 @@ def create_visualization_from_ct_info(
         "CHOSEN_COND_LVL": COND_FILTER_LVL,
         "CHOSEN_ITRV_LVL": ITRV_FILTER_LVL,
         "DO_EVALUATE_CLUSTERING": True,
-        "MAX_EC_SAMPLES": 50_000,
+        "MAX_EC_SAMPLES": 12_500,  # to avoid taking too long (it is for a demo)
         "MIN_EC_SAMPLES": 2_500,
         "N_OPTUNA_TRIALS": 25,
-        # "LOAD_EMBEDDINGS": True,  # FOR DEBUG
-        # "LOAD_BERTOPIC_RESULTS": True,  # FOR DEBUG
-        # "CLUSTER_REPRESENTATION_MODEL": "gpt",
+        # "LOAD_EMBEDDINGS": True,  # FOR DEBUG (1)
+        # "LOAD_BERTOPIC_RESULTS": True,  # FOR DEBUG (1)
+        # "CLUSTER_REPRESENTATION_MODEL": "gpt",   # FOR ME ONLY
     }
     if ct_path is not None:
         to_update.update({"ADDITIONAL_NEGATIVE_FILTER": {"ct path": ct_path}})        

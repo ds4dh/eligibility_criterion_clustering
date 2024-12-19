@@ -23,7 +23,7 @@ INDEX_PATH = "%s/" % PREFIX_PATH
 PREDICT_PATH = "%s/predict" % PREFIX_PATH
 VISUALIZE_PATH = "%s/visualize" % PREFIX_PATH
 SERVE_HTML_PATH = "%s/serve-html" % PREFIX_PATH
-GET_LATEST_LOG_PATH = "%s/get-latest-log" % PREFIX_PATH
+GET_LATEST_RESULT_PATH = "%s/get-latest-result" % PREFIX_PATH
 STATIC_URL_PATH = "%s/static" % PREFIX_PATH
 
 app = Flask(
@@ -105,7 +105,7 @@ def cleanup_session_log():
         g.logger.info(f"Reset log file for session: {session_id}")
         
     if os.path.exists(g.cfg["USER_DIR"]):
-        shutil.rmtree(g.cfg["USER_DIR"])  # ignore_errors=True) -> maybe right problems on HEG? I don't think so
+        shutil.rmtree(g.cfg["USER_DIR"], ignore_errors=True)  # added ignore for debug
         g.logger.info(f"Deleted result files for session: {session_id}")
         
     return jsonify({"status": "Session cleanup successful"}), 200
@@ -131,35 +131,47 @@ def serve_html():
         return jsonify({"error": "File not found"}), 404
 
 
-@app.route(GET_LATEST_LOG_PATH, methods=["GET"])
-def get_latest_log():
-    """ Serve the latest log line
+@app.route(GET_LATEST_RESULT_PATH, methods=["GET"])
+def get_latest_result():
+    """ Serve the latest log line and the generated HTML path, if any
     """
+    session_id = request.cookies.get("session_id")
+    if not session_id or session_id not in session_locks:
+        return jsonify({"log": "No session in progress", "html_path": None}), 200
+    
+    lock_info = session_locks[session_id]
     log_file_path = g.logger.log_path
-    if not os.path.exists(log_file_path):
-        return jsonify({"log": "Log file not found"}), 404
-    try:
-        with open(log_file_path, "r") as log_file:
-            lines = log_file.readlines()
-            last_line = lines[-1] if lines else "Initializing"
-            return jsonify({"log": last_line}), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    
+    # Fetch the latest log line
+    latest_log = "Initializing"
+    if os.path.exists(log_file_path):
+        try:
+            with open(log_file_path, "r") as log_file:
+                lines = log_file.readlines()
+                latest_log = lines[-1] if lines else "Initializing"
+        except Exception as e:
+            latest_log = f"Error reading log: {str(e)}"
+    
+    # Return the log line and the HTML path
+    return jsonify({"log": latest_log, "html_path": lock_info.get("html_path")}), 200
 
 
 @app.route(rule=VISUALIZE_PATH, methods=["POST"])
 def visualize():
     """ Handle visualization logic for a given request and demonstration mode
     """
-    # Check this session does not already run a visualization
+    # Check if session already active
     session_id = request.cookies.get("session_id")
     if session_id in session_locks:
-        return jsonify({"error": "A visualization is still in progress for your session."}), 429
+        if session_locks[session_id]["in_progress"] == True:
+            return jsonify({"error": " ".join([
+                "A visualization is being generated in the background for your session.",
+                "Click OK to come back to it.",
+            ])}), 429
     
-    # Visualization itself (try loop to handle session locks)
     try:
-        session_locks[session_id] = True  # global update
-    
+        session_locks[session_id] = {"in_progress": True, "html_path": None}
+        
         # Validate request data
         request_data = request.get_json(force=True)
         demo_check_error, demo_value = check_request_for_demo(request_data)
@@ -173,24 +185,23 @@ def visualize():
             return visu_error, 400
         g.logger.info(f"Visualization successfully generated for mode {demo_value}")
         
-        # Return the path to the visualization HTML file
+        # Update session lock with the generated HTML path
         html_path = visu_value["html"]
         if os.path.exists(html_path):
+            session_locks[session_id]["html_path"] = html_path
             g.logger.info(f"Generated visualization at {html_path}")
-            return jsonify({"html_path": f"{SERVE_HTML_PATH}?path={html_path}"})
+            return jsonify({"status": "Visualization complete"}), 200
         else:
             g.logger.error(f"Visualization file not found at {html_path}")
             return jsonify({"error": "Visualization file not found"}), 404
-    
-    # In case anything happens
+        
     except Exception as e:
         error_message = f"An error occurred during visualization: {str(e)}"
         g.logger.error(error_message, exc_info=True)
         return jsonify({"error": error_message}), 500
     
-    # Release lock for this session id
     finally:
-        session_locks.pop(session_id, None)
+        session_locks[session_id]["in_progress"] = False
         
         
 def check_request_for_demo(request_data: dict[str, Any]):
