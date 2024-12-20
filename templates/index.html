@@ -90,7 +90,6 @@
                     logOutput.textContent = logResult.log;
 
                     if (visualizationState.inProgress) {
-                        // Update UI with visualization status
                         if (logResult.log.includes("Visualization complete")) {
                             visualizationFrame.src = visualizationState.htmlPath;
                             visualizationFrame.hidden = false;
@@ -100,6 +99,7 @@
                         }
                     }
                 }
+                
             } catch (error) {
                 console.warn("Error checking visualization progress:", error.message);
             }
@@ -127,7 +127,7 @@
                         }
                     }
                 } catch (error) {
-                    console.warn("Polling failed:", error.message);
+                    console.warn("Error during polling:", error.message);
                 }
             }, 1000);
         }
@@ -216,7 +216,8 @@
                 }
             
             } catch (error) {
-                alert("An error occurred: " + error.message);
+                // Handle silently for response status 429
+                console.warn("Potential visualization error: " + error.message);
                 setVisualizeButtonState("on");
             
             } finally {
