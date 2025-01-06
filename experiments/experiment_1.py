@@ -53,9 +53,14 @@ def experiment_1_fn(
         ]
         
         for i, task in enumerate(tasks):
-            task.update({"LOAD_PARSED_DATA": i != 0})
-            # Use the line below after completing experiment 1 with the line above
-            # if you want to generate cluster representations with GPT-3.5-Turbo 
+            # Use this line if you haven't run "python src/parse_data.py" yet
+            # task.update({"LOAD_PARSED_DATA": i != 0})
+            
+            # Use this line if you did run and completed "python src/parse_data.py"
+            task.update({"LOAD_PARSED_DATA": True})
+            
+            # Use the line below after completing experiment 1 with one of the lines
+            # above if you want to generate cluster representations with GPT-3.5-Turbo 
             # task.update({
             #     "LOAD_PARSED_DATA": True,
             #     "LOAD_EMBEDDINGS": True,
@@ -63,6 +68,8 @@ def experiment_1_fn(
             #     "CLUSTER_REPRESENTATION_MODEL": "gpt",
             #     "REGENERATE_REPRESENTATIONS_AFTER_LOADING_BERTOPIC_RESULTS": True,
             # })
+            
+            # Run the experiment
             g.logger.info(f"Sending curl request with {task}")
             result = run_curl_command(task=task, port=port)
             if result.returncode == 0:
@@ -70,8 +77,10 @@ def experiment_1_fn(
             else:
                 g.logger.error(f"Curl request failed (code {result.returncode})")
                 g.logger.error(f"Detailed error: {result.stderr}")
-            time.sleep(10)  # delay to avoid overloading the server
-    
+            
+            # Delay to avoid overloading the server
+            time.sleep(10)
+            
     # Terminate the WSGI server process
     finally:
         os.kill(wsgi_process.pid, signal.SIGTERM)
