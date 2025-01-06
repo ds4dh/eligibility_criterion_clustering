@@ -2,7 +2,7 @@
 import os
 import csv
 import torchdata.datapipes.iter as dpi
-from flask import g
+from flask import Flask, g
 from tqdm import tqdm
 from torchdata.dataloader2 import (
     DataLoader2,
@@ -10,6 +10,7 @@ from torchdata.dataloader2 import (
     MultiProcessingReadingService,
 )
 try:
+    from config_utils import CTxAILogger, load_default_config, update_config
     from cluster_utils import set_seeds
     from parse_utils import (
         ClinicalTrialFilter,
@@ -19,6 +20,7 @@ try:
         CustomJsonParser,
     )
 except:
+    from .config_utils import load_default_config, update_config
     from .cluster_utils import set_seeds
     from .parse_utils import (
         ClinicalTrialFilter,
@@ -32,7 +34,13 @@ except:
 def main():
     """ Main script (if not run from a web-service)
     """
-    parse_data_fn()
+    app = Flask(__name__)
+    with app.app_context():
+        g.session_id = "parse_data"
+        g.cfg = load_default_config()
+        g.cfg = update_config(cfg=g.cfg, request_data={"SESSION_ID": g.session_id})
+        g.logger = CTxAILogger(level="INFO", session_id=g.session_id)
+        parse_data_fn()
 
 
 def parse_data_fn() -> None:

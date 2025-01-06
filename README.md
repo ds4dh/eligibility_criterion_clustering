@@ -31,12 +31,13 @@ Start by downloading the raw dataset by executing:
 Then, build the eligibility criterion dataset by executing:
 
 ```
-python src/parse_data.py
+python src/parse_data.py  # this step processes around 100k CTs
 ```
 
-Then, run all experiments:
+Then, run all experiments (each experiment takes some time, consider running them in a screen session):
 
 ```
+# Ensure each experiment completes before running the next one
 python experiments/experiment_1.py
 python experiments/experiment_2.py
 ./experiments/experiment_3.sh

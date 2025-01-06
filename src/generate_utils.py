@@ -4,7 +4,7 @@ import logging
 logging.getLogger("transformers").setLevel(logging.ERROR)
 from flask import g
 try:
-    from src.config_utils import update_config
+    from config_utils import update_config
 except:
     from .config_utils import update_config
 import torch

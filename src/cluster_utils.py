@@ -15,12 +15,11 @@ from itertools import product
 from collections import defaultdict
 from dataclasses import dataclass, asdict
 try:
-    from src.config_utils import optuna_with_custom_tqdm
+    from config_utils import optuna_with_custom_tqdm
 except:
     from .config_utils import optuna_with_custom_tqdm
     
 # Optimization
-import tqdm
 import optuna
 optuna.logging.set_verbosity(optuna.logging.WARNING)
 from optuna.samplers import TPESampler, RandomSampler

@@ -298,7 +298,7 @@ def predict():
             return jsonify({"error": "Missing field in request data"}), 400
     
     # Update in-memory configuration using request data
-    g.cfg = config_utils.update_config(request_data)
+    g.cfg = config_utils.update_config(cfg=g.cfg, request_data=request_data)
     
     # Parse raw data into pre-processed data files
     g.logger.info("Parsing criterion texts into individual criteria")

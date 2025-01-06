@@ -2,14 +2,16 @@ import os
 import csv
 import json
 import argparse
-from flask import g
+from flask import Flask, g
 try:
+    from config_utils import CTxAILogger, load_default_config, update_config
     from parse_data import CustomJsonParser
     from parse_utils import ClinicalTrialFilter
     from cluster_utils import ClusterOutput
     from cluster_data import cluster_data_fn
     from generate_utils import compute_scores, generate_llm_response, update_config_filters
 except:
+    from .config_utils import CTxAILogger, load_default_config, update_config
     from .parse_data import CustomJsonParser
     from .parse_utils import ClinicalTrialFilter
     from .cluster_utils import ClusterOutput
@@ -74,9 +76,20 @@ Provide your reformulated section below:
 
 
 def main():
+    app = Flask(__name__)
+    with app.app_context():
+        g.session_id = "generate_data"
+        g.cfg = load_default_config()
+        g.cfg = update_config(cfg=g.cfg, request_data={"SESSION_ID": g.session_id})
+        g.logger = CTxAILogger(level="INFO", session_id=g.session_id)
+        generate_data_fn()
+
+
+def generate_data_fn():
     """ Compare clustering to llm methods for generating eligibility criteria
         section in clinical trials
     """
+    # Select clinical trials for EC-section generation evaluation
     ct_data, ec_references = get_evaluated_ct_dataset(
         data_path=g.cfg["FULL_DATA_PATH"],
         cond_type_filters=[EVALUATION_COND_TYPE_FILTER],

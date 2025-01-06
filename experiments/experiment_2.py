@@ -6,49 +6,21 @@ import time
 import json
 import signal
 import subprocess
-from src import config_utils
-config_utils.load_default_config()
-logger = config_utils.CTxAILogger("INFO")
-
-
-def run_wsgi_server():
-    """ Function to start the WSGI server
-    """
-    logger.info("Starting WSGI server")
-    command = ["python", "wsgi.py"]
-    return subprocess.Popen(command)
-
-
-def run_curl_command(task: dict):
-    """ Query the clustering API with one set of experimental conditions
-
-    Args:
-        task (dict): configuration parameters for this part of the exepriment
-
-    Returns:
-        response from the clustering API
-    """
-    query_dict = {
-        "EXPERIMENT_MODE": 2,
-        "ENVIRONMENT": "ctgov",
-        "LOAD_PARSED_DATA": True,
-        "CHOSEN_COND_LVL": 4,
-        "CHOSEN_ITRV_LVL": 3,
-    }
-    query_dict.update(task)
-    query_json = json.dumps(query_dict)
-    
-    command = [
-        "curl", "-X", "POST", "http://0.0.0.0:8998/ct-risk/cluster/predict",
-        "-H", "Content-Type: application/json",
-        "-d", query_json,
-    ]
-    
-    result = subprocess.run(command, capture_output=True, text=True)
-    return result
+from src.config_utils import CTxAILogger, load_default_config, update_config
+from flask import Flask, g
 
 
 def main():
+    app = Flask(__name__)
+    with app.app_context():
+        g.session_id = "experiment_2"
+        g.cfg = load_default_config()
+        g.cfg = update_config(cfg=g.cfg, request_data={"SESSION_ID": g.session_id})
+        g.logger = CTxAILogger(level="INFO", session_id=g.session_id)
+        experiment_2_fn()
+    
+    
+def experiment_2_fn():
     """ Run the clustering pipeline for many different experimental conditions
     """
     # Start the WSGI server
@@ -83,18 +55,55 @@ def main():
         ]
         
         for task in tasks:
-            logger.info(f"Sending curl request with {task}")
+            g.logger.info(f"Sending curl request with {task}")
             result = run_curl_command(task)
             if result.returncode == 0:
-                logger.info("Curl request sent and received successfully")
+                g.logger.info("Curl request sent and received successfully")
             else:
-                logger.error(f"Curl request failed (code {result.returncode})")
-                logger.error(f"Detailed error: {result.stderr}")
+                g.logger.error(f"Curl request failed (code {result.returncode})")
+                g.logger.error(f"Detailed error: {result.stderr}")
             time.sleep(10)  # delay to avoid overloading the server
     
     finally:
         # Terminate the WSGI server process
         os.kill(wsgi_process.pid, signal.SIGTERM)
+        
+    
+def run_wsgi_server():
+    """ Function to start the WSGI server
+    """
+    g.logger.info("Starting WSGI server")
+    command = ["python", "wsgi.py"]
+    return subprocess.Popen(command)
+
+
+def run_curl_command(task: dict):
+    """ Query the clustering API with one set of experimental conditions
+
+    Args:
+        task (dict): configuration parameters for this part of the exepriment
+
+    Returns:
+        response from the clustering API
+    """
+    query_dict = {
+        "EXPERIMENT_MODE": 2,
+        "ENVIRONMENT": "ctgov",
+        "LOAD_PARSED_DATA": True,
+        "CHOSEN_COND_LVL": 4,
+        "CHOSEN_ITRV_LVL": 3,
+    }
+    query_dict.update(task)
+    query_json = json.dumps(query_dict)
+    
+    command = [
+        "curl", "-X", "POST", "http://0.0.0.0:8998/ct-risk/cluster/predict",
+        "-H", "Content-Type: application/json",
+        "-d", query_json,
+    ]
+    
+    result = subprocess.run(command, capture_output=True, text=True)
+    return result
 
 
 if __name__ == "__main__":

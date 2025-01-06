@@ -2,7 +2,7 @@
 import os
 from flask import g
 try:
-    from src.config_utils import CustomTqdm, update_config
+    from config_utils import CustomTqdm, update_config
 except:
     from .config_utils import CustomTqdm, update_config
 import re

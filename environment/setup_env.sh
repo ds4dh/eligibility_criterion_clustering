@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Environment specifics
-ENV_NAME="ctxai"
+ENV_NAME="ctxai_test"
 PYTHON_VERSION="3.10"
 
 # Create a new conda environment with cuML and activate it
