@@ -1,12 +1,31 @@
+import argparse
 from app import app
 
 
-HOST_ADDRESS = "0.0.0.0"
-PORT_NUMBER = 8998
-
-
 def main():
-    app.run(debug=False, host=HOST_ADDRESS, port=PORT_NUMBER)
+    # Parse command-line arguments, if any is given
+    parser = argparse.ArgumentParser(description="Run the Flask application.")
+    parser.add_argument(
+        "--host", 
+        type=str, 
+        default="0.0.0.0", 
+        help="Host address for the server (default: 0.0.0.0)"
+    )
+    parser.add_argument(
+        "--port", 
+        type=int, 
+        default=8998, 
+        help="Port number for the server (default: 8998)"
+    )
+    parser.add_argument(
+        "--debug", 
+        action="store_true", 
+        help="Enable Flask debug mode"
+    )
+    args = parser.parse_args()
+    
+    # Run the Flask application
+    app.run(debug=args.debug, host=args.host, port=args.port)
 
 
 if __name__ == "__main__":

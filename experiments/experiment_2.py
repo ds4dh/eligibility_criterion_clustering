@@ -20,17 +20,23 @@ def main():
         experiment_2_fn()
     
     
-def experiment_2_fn():
+def experiment_2_fn(
+    port: int=8080,
+):
     """ Run the clustering pipeline for many different experimental conditions
+    
+    Args:
+        port (int): port number of the clustering API server
     """
     # Start the WSGI server
-    wsgi_process = run_wsgi_server()
+    wsgi_process = run_wsgi_server(port=port)
     
     # Give the server some time to start
+    g.logger.info(f"Server starting... Experiment 2 will start in a few seconds")
     time.sleep(20)
     
+    # Run a sequence of experiments with different conditions
     try:
-        # Define your sequence of environments and data paths
         tasks = [
             {"CHOSEN_COND_IDS": ["C01"], "CHOSEN_PHASES": ["phase1"], "PREDICTOR_TARGET_TYPES": ["study_duration", "enrollment_count", "operational_rate"]},
             {"CHOSEN_COND_IDS": ["C01"], "CHOSEN_PHASES": ["phase2"], "PREDICTOR_TARGET_TYPES": ["study_duration", "enrollment_count", "operational_rate"]},
@@ -56,7 +62,7 @@ def experiment_2_fn():
         
         for task in tasks:
             g.logger.info(f"Sending curl request with {task}")
-            result = run_curl_command(task)
+            result = run_curl_command(task=task, port=port)
             if result.returncode == 0:
                 g.logger.info("Curl request sent and received successfully")
             else:
@@ -64,24 +70,33 @@ def experiment_2_fn():
                 g.logger.error(f"Detailed error: {result.stderr}")
             time.sleep(10)  # delay to avoid overloading the server
     
+    # Terminate the WSGI server process
     finally:
-        # Terminate the WSGI server process
         os.kill(wsgi_process.pid, signal.SIGTERM)
         
     
-def run_wsgi_server():
+def run_wsgi_server(
+    port: int,
+):
     """ Function to start the WSGI server
+    
+    Args:
+        port (int): port number of the clustering API server
     """
     g.logger.info("Starting WSGI server")
-    command = ["python", "wsgi.py"]
+    command = ["python", "wsgi.py", "--port", str(port)]
     return subprocess.Popen(command)
 
 
-def run_curl_command(task: dict):
+def run_curl_command(
+    task: dict,
+    port: int,
+):
     """ Query the clustering API with one set of experimental conditions
 
     Args:
         task (dict): configuration parameters for this part of the exepriment
+        port (int): port number of the clustering API server
 
     Returns:
         response from the clustering API
@@ -96,8 +111,9 @@ def run_curl_command(task: dict):
     query_dict.update(task)
     query_json = json.dumps(query_dict)
     
+    url = f"http://0.0.0.0:{port}/ct-risk/cluster/predict"
     command = [
-        "curl", "-X", "POST", "http://0.0.0.0:8998/ct-risk/cluster/predict",
+        "curl", "-X", "POST", url,
         "-H", "Content-Type: application/json",
         "-d", query_json,
     ]
