@@ -80,7 +80,7 @@ def main():
     with app.app_context():
         g.session_id = "generate_data"
         g.cfg = load_default_config()
-        g.cfg = update_config(cfg=g.cfg, request_data={"SESSION_ID": g.session_id})
+        g.cfg = update_config(cfg=g.cfg, to_update={"SESSION_ID": g.session_id})
         g.logger = CTxAILogger(level="INFO", session_id=g.session_id)
         generate_data_fn()
 

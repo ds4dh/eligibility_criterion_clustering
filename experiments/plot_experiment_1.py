@@ -47,7 +47,7 @@ def main():
     # Main-text Figure 1
     plot_figure_1(
         output_path=OUTPUT_PATH_MAIN,
-        add_figure_1b=True,
+        add_figure_1b=False,  # PUT BACK TO TRUE WHEN WE GOT THE DATA BACK
         normalize_ceil_perf=True,
     )
     

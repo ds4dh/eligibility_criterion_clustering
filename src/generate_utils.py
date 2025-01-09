@@ -353,7 +353,7 @@ def update_config_filters(
         to_update[key] = value
     
     # Update globally shared configuration with current information
-    g.cfg = update_config(g.cfg, request_data=to_update)
+    g.cfg = update_config(g.cfg, to_update=to_update)
 
 
 def extract_ids_at_lvl(

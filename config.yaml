@@ -50,7 +50,7 @@ STATUS_MAP: null  # null to ignore
 ADDITIONAL_NEGATIVE_FILTER: {}  # {} to ignore // used to remove some eligibility criteria based on key-value mapping
 
 # Eligibility criteria embedding parameters
-MAX_EC_SAMPLES: 2_000_000  # ct-gov has maximum 1740170 criteria (maximum, if no filter is applied)
+MAX_EC_SAMPLES: 50_000  # 2_000_000  # ct-gov has maximum 1740170 criteria (maximum, if no filter is applied)
 MIN_EC_SAMPLES: 5_000  # this parameter is only used for experiment 3!
 EMBEDDING_BATCH_SIZE: 64
 EMBEDDING_MODEL_ID_MAP:
@@ -63,7 +63,7 @@ EMBEDDING_MODEL_ID_MAP:
   # transformer-sentence: sentence-transformers/all-mpnet-base-v2
 
 # Clustering hyper-optimization parameters
-N_OPTUNA_TRIALS: 100
+N_OPTUNA_TRIALS: 25
 N_CLUSTER_MAX: 500  # used to avoid extreme hyper-parameter combinations
 OPTUNA_PARAM_RANGES:
   max_cluster_size_primary: [0.01, 0.050]

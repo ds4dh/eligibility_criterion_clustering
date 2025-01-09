@@ -47,18 +47,23 @@ def load_user_context() -> None:
         g.new_session_id = session_id  # track it for the after_request handler
     else:
         g.new_session_id = None  # no new cookie is needed
+    
+    # Update config based on whether it is for an experiment or a visualization
+    to_update = {"SESSION_ID": session_id}
+    exp_mode = request.cookies.get("exp_mode")
+    if exp_mode:
+        to_update.update({"SELECT_USER_ID_AND_PROJECT_ID_AUTOMATICALLY": True})
+    else:
+        to_update.update({
+            "USER_ID": "vis-%s" % session_id,
+            "SELECT_USER_ID_AND_PROJECT_ID_AUTOMATICALLY": False,
+        })
+        session_id = "app-%s" % session_id
         
-    # Create [user and session]-specific config and logger
+    # Create session-specific config and logger
     g.session_id = session_id
     g.cfg = config_utils.load_default_config()
-    g.cfg = config_utils.update_config(
-        cfg=g.cfg,
-        request_data={
-            "SESSION_ID": session_id,
-            "USER_ID": "vis-%s" % session_id,  # we want session specific result folders
-            "SELECT_USER_ID_AND_PROJECT_ID_AUTOMATICALLY": False,
-        }
-    )
+    g.cfg = config_utils.update_config(cfg=g.cfg, to_update=to_update)
     g.logger = config_utils.CTxAILogger(level="INFO", session_id=session_id)
 
 
@@ -298,7 +303,7 @@ def predict():
             return jsonify({"error": "Missing field in request data"}), 400
     
     # Update in-memory configuration using request data
-    g.cfg = config_utils.update_config(cfg=g.cfg, request_data=request_data)
+    g.cfg = config_utils.update_config(cfg=g.cfg, to_update=request_data)
     
     # Parse raw data into pre-processed data files
     g.logger.info("Parsing criterion texts into individual criteria")

@@ -15,7 +15,7 @@ def main():
     with app.app_context():
         g.session_id = "experiment_2"
         g.cfg = load_default_config()
-        g.cfg = update_config(cfg=g.cfg, request_data={"SESSION_ID": g.session_id})
+        g.cfg = update_config(cfg=g.cfg, to_update={"SESSION_ID": g.session_id})
         g.logger = CTxAILogger(level="INFO", session_id=g.session_id)
         experiment_2_fn()
     
@@ -60,15 +60,23 @@ def experiment_2_fn(
             {"CHOSEN_COND_IDS": ["C20"], "CHOSEN_PHASES": [], "PREDICTOR_TARGET_TYPES": ["phase"]},   
         ]
         
-        for task in tasks:
+        # Run the actual experiments
+        n_fails = 0
+        for task_id, task in enumerate(tasks):
             g.logger.info(f"Sending curl request with {task}")
-            result = run_curl_command(task=task, port=port)
+            result = run_curl_command(task=task, task_id=task_id, port=port)
             if result.returncode == 0:
                 g.logger.info("Curl request sent and received successfully")
             else:
                 g.logger.error(f"Curl request failed (code {result.returncode})")
                 g.logger.error(f"Detailed error: {result.stderr}")
-            time.sleep(10)  # delay to avoid overloading the server
+                n_fails += 1
+            
+            # Delay to avoid overloading the server
+            time.sleep(10)
+        
+        # Log the number of successful experiments
+        g.logger.info(f"Experiment 2 completed with {n_fails} failed tasks")
     
     # Terminate the WSGI server process
     finally:
@@ -90,12 +98,14 @@ def run_wsgi_server(
 
 def run_curl_command(
     task: dict,
+    task_id: int,
     port: int,
 ):
     """ Query the clustering API with one set of experimental conditions
 
     Args:
         task (dict): configuration parameters for this part of the exepriment
+        task_id (str): identifier for the current task
         port (int): port number of the clustering API server
 
     Returns:
@@ -116,6 +126,7 @@ def run_curl_command(
         "curl", "-X", "POST", url,
         "-H", "Content-Type: application/json",
         "-d", query_json,
+        "-b", f"session_id=experiment_2_task_{task_id:02}; exp_mode=True",
     ]
     
     result = subprocess.run(command, capture_output=True, text=True)

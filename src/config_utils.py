@@ -16,11 +16,11 @@ def load_default_config(default_path: str="config.yaml") -> dict:
     return cfg
 
 
-def update_config(cfg: dict, request_data: dict):
+def update_config(cfg: dict, to_update: dict):
     """ Update the in-memory configuration with a dictionary of updates
     """
     # Update configuration with new data
-    for key, value in request_data.items():
+    for key, value in to_update.items():
         if isinstance(cfg.get(key), dict) and isinstance(value, dict):
             cfg[key].update(value)
         else:
@@ -144,7 +144,7 @@ class CTxAILogger:
         
         # Compute a user-specific log path
         os.makedirs(log_directory, exist_ok=True)
-        self.log_path = os.path.join(log_directory, f"app_{session_id}.log")
+        self.log_path = os.path.join(log_directory, f"{session_id}.log")
         
         # Create a session-specific logger instance
         self.logger = logging.getLogger(f"CTxAI_{session_id}")

@@ -179,7 +179,7 @@ def create_visualization_from_ct_info(
     }
     if ct_path is not None:
         to_update.update({"ADDITIONAL_NEGATIVE_FILTER": {"ct path": ct_path}})        
-    g.cfg = update_config(g.cfg, request_data=to_update)  # thread-safe global update
+    g.cfg = update_config(g.cfg, to_update=to_update)  # thread-safe global update
     
     # Cluster eligibility criteria similar to the current CT (using filters)
     try:
