@@ -113,7 +113,7 @@ def generate_data_fn():
             cluster_output = cluster_data_fn(
                 embed_model_id=EMBED_MODEL_ID,
                 write_results=False,
-                generate_embeddings_hierarchically=True,
+                hierarchical_ec_scraping=True,
             )
             cluster_quality = cluster_output.cluster_metrics["label_free"]["Silhouette score"]
             cluster_ec_section = generate_cluster_ec_section(cluster_output)

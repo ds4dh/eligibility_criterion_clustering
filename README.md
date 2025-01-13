@@ -34,7 +34,7 @@ Then, build the eligibility criterion dataset by executing:
 python src/parse_data.py  # this step processes around 100k CTs
 ```
 
-Then, run all experiments. Ensure each experiment completes before running the next one. Experiment takes some time, consider running them in a screen session.
+Then, run all experiments. Ensure each experiment completes before running the next one. Experiment takes some time, consider running them in a screen session. Logs about each tasked experiment will be written in ./logs/
 
 ```
 python experiments/experiment_1.py  # this experiment will only plot 50k ECs to avoid GPU memory errors (can be modified in the config.yaml file)

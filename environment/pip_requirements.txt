@@ -20,3 +20,5 @@ kaleido==0.2.1  # not in nvcr.io/nvidia/pytorch:23.12-py3
 seaborn==0.13.2  # not in nvcr.io/nvidia/pytorch:23.12-py3
 statsmodels==0.14.3  # not in nvcr.io/nvidia/pytorch:23.12-py3
 Flask==3.0.1  # not in nvcr.io/nvidia/pytorch:23.12-py3
+httpx==0.27.2  # required for openai create_chat_completion to work
+urllib3==2.2.3  # required for openai create_chat_completion to work
